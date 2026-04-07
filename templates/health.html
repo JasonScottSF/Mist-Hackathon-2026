@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Network Health</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #20243a;
+      --border: #2a2d3a; --text: #e8eaf0; --muted: #6b7280;
+      --purple: #7c3aed; --indigo: #4f46e5;
+      --green: #22c55e; --yellow: #f59e0b; --red: #ef4444; --blue: #3b82f6;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--purple), var(--indigo));
+      border-radius: 8px; display: flex; align-items: center;
+      justify-content: center; font-size: 15px; color: #fff;
+    }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .user-name { font-size: 13px; color: var(--muted); }
+    .btn-ghost {
+      font-size: 13px; padding: 6px 14px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center;
+    }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+
+    .tab-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; display: flex; align-items: flex-end; gap: 4px;
+    }
+    .tab {
+      font-size: 13px; font-weight: 500; color: var(--muted);
+      padding: 10px 16px; border-bottom: 2px solid transparent;
+      text-decoration: none; white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+      display: flex; align-items: center; gap: 6px; margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--purple); }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 36px 28px 80px; }
+    .page-title { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .page-sub { font-size: 14px; color: var(--muted); margin-bottom: 32px; }
+
+    #loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 16px; min-height: 300px; color: var(--muted);
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--purple); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error-banner {
+      display: none; background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3); border-radius: 10px;
+      color: #f87171; padding: 14px 18px; margin-bottom: 24px; font-size: 13px;
+    }
+    #content { display: none; }
+
+    .section { margin-bottom: 36px; }
+    .section-title {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted);
+      display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+    }
+    .section-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+    /* ── Org summary cards ── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+    .summary-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 18px 20px;
+    }
+    .summary-label {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 8px;
+    }
+    .summary-score { font-size: 36px; font-weight: 700; line-height: 1; }
+    .summary-score.green  { color: var(--green); }
+    .summary-score.yellow { color: var(--yellow); }
+    .summary-score.red    { color: var(--red); }
+    .summary-score.muted  { color: var(--muted); }
+    .summary-bar { height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+    .summary-fill { height: 100%; border-radius: 99px; }
+    .summary-fill.green  { background: var(--green); }
+    .summary-fill.yellow { background: var(--yellow); }
+    .summary-fill.red    { background: var(--red); }
+
+    /* ── Sites table ── */
+    .sites-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left; padding: 11px 16px;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500;
+    }
+    tbody tr { transition: background 0.1s; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+
+    .site-link {
+      color: #a78bfa; text-decoration: none; font-weight: 500;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .site-link:hover { color: #c4b5fd; text-decoration: underline; }
+
+    .score-cell { font-size: 14px; font-weight: 600; }
+    .score-cell.green  { color: var(--green); }
+    .score-cell.yellow { color: var(--yellow); }
+    .score-cell.red    { color: var(--red); }
+    .score-cell.muted  { color: var(--muted); }
+
+    .mini-bar { width: 56px; height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 6px; }
+    .mini-fill { height: 100%; border-radius: 99px; }
+    .mini-fill.green  { background: var(--green); }
+    .mini-fill.yellow { background: var(--yellow); }
+    .mini-fill.red    { background: var(--red); }
+
+    /* ── Alarms ── */
+    .alarm-list {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .alarm-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 140px 60px;
+      gap: 12px; align-items: center;
+      padding: 11px 18px; border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .alarm-row:last-child { border-bottom: none; }
+    .alarm-row:hover { background: var(--surface2); }
+    .sev-pill {
+      font-size: 11px; font-weight: 600; padding: 3px 8px;
+      border-radius: 4px; text-align: center; white-space: nowrap;
+    }
+    .sev-critical { background: rgba(239,68,68,0.15);  color: var(--red); }
+    .sev-major    { background: rgba(249,115,22,0.15); color: #f97316; }
+    .sev-minor    { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .sev-info     { background: rgba(59,130,246,0.15); color: var(--blue); }
+    .alarm-type   { font-weight: 500; color: var(--text); }
+    .alarm-meta   { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .alarm-meta-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--surface2); border-radius: 4px; padding: 1px 6px;
+      font-size: 11px; color: var(--muted);
+    }
+    .alarm-site  { font-size: 12px; color: var(--muted); }
+    .alarm-count { font-size: 12px; color: var(--muted); text-align: right; }
+    .alarm-header {
+      display: grid; grid-template-columns: 80px 1fr 140px 60px;
+      gap: 12px; padding: 9px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .alarm-header span {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500;
+    }
+    .empty-state { padding: 28px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    .last-updated { font-size: 12px; color: var(--muted); margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">&#8644;</div>
+    DPC → NAC Converter
+  </div>
+  <div class="header-right">
+    <span class="user-name">{{ user_name }}</span>
+    <a class="btn-ghost" href="/orgs">&#8592; Orgs</a>
+    <a class="btn-ghost" href="/logout">Sign out</a>
+  </div>
+</header>
+
+<nav class="tab-bar">
+  <a class="tab active" data-tab-id="health" href="/health/{{ org_id }}">&#128246; Network Health</a>
+  <a class="tab"        data-tab-id="dpc"    href="/scan/{{ org_id }}">&#8644; DPC → NAC</a>
+</nav>
+
+<main>
+  <div class="page-title">Network Health</div>
+  <div class="page-sub">SLE scores — last 24 hours &nbsp;
+    <code style="font-size:11px;color:#a78bfa">{{ org_id }}</code>
+  </div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Fetching health data from Mist…</span>
+  </div>
+  <div id="error-banner"></div>
+  <div id="content"></div>
+</main>
+
+<script>
+const ORG_ID = {{ org_id | tojson }};
+
+const SKIP_KEYS = new Set(["site_id", "num_aps", "num_clients", "num_switches", "num_gateways"]);
+
+function scoreColor(v) {
+  if (v >= 0.95) return "green";
+  if (v >= 0.75) return "yellow";
+  return "red";
+}
+
+// Average all numeric metric values in a single site object
+function siteAvg(siteObj) {
+  const vals = Object.entries(siteObj)
+    .filter(([k, v]) => !SKIP_KEYS.has(k) && typeof v === "number")
+    .map(([, v]) => v);
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+// Average one metric across all sites that have it
+function avgMetric(sites, key) {
+  const vals = sites.map(s => s[key]).filter(v => typeof v === "number");
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+// Merge all three SLE categories into a per-site object
+function buildSiteMap(sle, siteNames) {
+  const map = {};
+  for (const [cat, sites] of Object.entries(sle)) {
+    for (const site of sites) {
+      const id = site.site_id;
+      if (!id) continue;
+      if (!map[id]) map[id] = { site_id: id, name: siteNames[id] || id };
+      Object.assign(map[id], site);
+    }
+  }
+  return Object.values(map);
+}
+
+function scoreCard(label, avg, dotColor) {
+  if (avg === null) return "";
+  const pct = Math.round(avg * 100);
+  const cls = scoreColor(avg);
+  return `
+    <div class="summary-card">
+      <div class="summary-label">
+        <span class="section-dot" style="background:${dotColor};margin-right:6px"></span>${label}
+      </div>
+      <div class="summary-score ${cls}">${pct}%</div>
+      <div class="summary-bar"><div class="summary-fill ${cls}" style="width:${pct}%"></div></div>
+    </div>`;
+}
+
+function miniScore(val) {
+  if (val === null) return `<span style="color:var(--muted)">—</span>`;
+  const pct = Math.round(val * 100);
+  const cls = scoreColor(val);
+  return `<span class="score-cell ${cls}">${pct}%</span>
+          <span class="mini-bar"><span class="mini-fill ${cls}" style="width:${pct}%"></span></span>`;
+}
+
+function categoryAvg(sites, category) {
+  const catSites = sites.filter(s => {
+    const keys = Object.keys(s).filter(k => !SKIP_KEYS.has(k) && k !== "name");
+    return keys.length > 0;
+  });
+  if (!catSites.length) return null;
+  const allVals = [];
+  for (const site of catSites) {
+    for (const [k, v] of Object.entries(site)) {
+      if (!SKIP_KEYS.has(k) && k !== "name" && k !== "site_id" && typeof v === "number") {
+        allVals.push(v);
+      }
+    }
+  }
+  if (!allVals.length) return null;
+  return allVals.reduce((a, b) => a + b, 0) / allVals.length;
+}
+
+function sevClass(sev) {
+  const s = (sev || "").toLowerCase();
+  if (s === "critical") return "sev-critical";
+  if (s === "major")    return "sev-major";
+  if (s === "minor")    return "sev-minor";
+  return "sev-info";
+}
+
+function deviceIcon(type, group) {
+  const t = (type  || "").toLowerCase();
+  const g = (group || "").toLowerCase();
+  if (t.includes("ap") || t.includes("wireless"))           return "📡";
+  if (t.includes("switch") || t.includes("port"))           return "🔀";
+  if (t.includes("gw") || t.includes("gateway") || t.includes("srx") || t.includes("ssr")) return "🔒";
+  if (t.includes("chassis"))                                 return "🖥️";
+  if (g.includes("gateway") || g.includes("wan"))           return "🔒";
+  if (g.includes("switch"))                                  return "🔀";
+  if (g.includes("wireless") || g.includes("ap"))           return "📡";
+  return "⚠️";
+}
+
+function timeAgo(epochSec) {
+  if (!epochSec) return "";
+  const diff = Math.floor(Date.now() / 1000) - epochSec;
+  if (diff < 60)    return `${diff}s ago`;
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function renderAlarms(alarms) {
+  if (!alarms.length) {
+    return `<div class="empty-state">✓ No active alarms.</div>`;
+  }
+  const rows = alarms.map(a => {
+    const sev       = a.severity || "";
+    const icon      = deviceIcon(a.title, a.group);
+    const hosts     = (a.hostnames || []).slice(0, 3).join(", ");
+    const countStr  = a.count > 1 ? `×${a.count}` : "";
+    const chips = [
+      a.group     ? `<span class="alarm-meta-chip">${a.group}</span>` : "",
+      hosts       ? `<span class="alarm-meta-chip">📍 ${hosts}</span>` : "",
+    ].filter(Boolean).join("");
+    return `
+      <div class="alarm-row">
+        <span class="sev-pill ${sevClass(sev)}">${sev || "info"}</span>
+        <div>
+          <div class="alarm-type">${icon} ${a.title || "Alarm"}</div>
+          ${chips ? `<div class="alarm-meta">${chips}</div>` : ""}
+        </div>
+        <div class="alarm-site">${a.site_name || ""}<br>
+          <span style="font-size:11px">${timeAgo(a.timestamp)}</span>
+        </div>
+        <div class="alarm-count">${countStr}</div>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="alarm-header">
+      <span>Severity</span><span>Alarm</span><span>Site</span><span>Count</span>
+    </div>` + rows;
+}
+
+async function load() {
+  const loadEl = document.getElementById("loading");
+  const errEl  = document.getElementById("error-banner");
+  const contEl = document.getElementById("content");
+
+  loadEl.style.display = "flex";
+  contEl.style.display = "none";
+  errEl.style.display  = "none";
+
+  try {
+    const res  = await fetch(`/api/health/${ORG_ID}`);
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.error === "Not authenticated") { window.location.href = "/login"; return; }
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    const siteNames = data.site_names || {};
+    const sites     = buildSiteMap(data.sle, siteNames);
+    const wifiSites = (data.sle.wifi  || []).filter(s => Object.keys(s).filter(k => !SKIP_KEYS.has(k)).length > 0);
+    const wiredSites= (data.sle.wired || []).filter(s => Object.keys(s).filter(k => !SKIP_KEYS.has(k)).length > 0);
+    const wanSites  = (data.sle.wan   || []).filter(s => Object.keys(s).filter(k => !SKIP_KEYS.has(k)).length > 0);
+
+    // Compute org-level averages per category
+    const wifiAvg  = categoryAvg(wifiSites,  "wifi");
+    const wiredAvg = categoryAvg(wiredSites, "wired");
+    const wanAvg   = categoryAvg(wanSites,   "wan");
+    const allVals  = [wifiAvg, wiredAvg, wanAvg].filter(v => v !== null);
+    const overallAvg = allVals.length ? allVals.reduce((a, b) => a + b, 0) / allVals.length : null;
+
+    // Build per-site averages (merge across categories)
+    const siteAvgMap = {};
+    for (const site of sites) {
+      const avg = siteAvg(site);
+      if (avg !== null) siteAvgMap[site.site_id] = avg;
+    }
+
+    // Per-site rows — pick per-category avg from merged site data
+    const siteRows = sites.map(site => {
+      const id      = site.site_id;
+      const name    = site.name || id;
+      const overall = siteAvgMap[id];
+      const wAvg    = siteAvg(Object.fromEntries(
+        Object.entries(site).filter(([k]) => !["site_id","name","switch-health","switch-health-v2","switch-throughput","switch-bandwidth","switch-bandwidth-v2","gateway-health","gateway-bandwidth","wan-link-health","wan-link-health-v2","application_health"].includes(k))
+      ));
+      if (overall === null) return ""; // site has no data
+
+      const ovPct = Math.round(overall * 100);
+      const cls   = scoreColor(overall);
+      return `
+        <tr>
+          <td><a class="site-link" href="/site/${ORG_ID}/${id}">&#128205; ${name}</a></td>
+          <td>${miniScore(overall)}</td>
+          <td>${miniScore(categoryAvgForSite(data.sle.wifi,  id))}</td>
+          <td>${miniScore(categoryAvgForSite(data.sle.wired, id))}</td>
+          <td>${miniScore(categoryAvgForSite(data.sle.wan,   id))}</td>
+        </tr>`;
+    }).join("");
+
+    const alarmHtml = renderAlarms(data.marvis || []);
+
+    contEl.innerHTML = `
+      <div class="last-updated">Last updated: ${new Date().toLocaleTimeString()}</div>
+
+      <div class="summary-grid">
+        ${scoreCard("Overall", overallAvg, "var(--purple)")}
+        ${scoreCard("WiFi", wifiAvg, "var(--blue)")}
+        ${scoreCard("Wired", wiredAvg, "var(--green)")}
+        ${scoreCard("WAN", wanAvg, "var(--yellow)")}
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span class="section-dot" style="background:var(--purple)"></span>Sites
+        </div>
+        <div class="sites-box">
+          <table>
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Overall</th>
+                <th>WiFi</th>
+                <th>Wired</th>
+                <th>WAN</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${siteRows || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No site data found.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span class="section-dot" style="background:var(--red)"></span>
+          Active Alarms
+          ${(data.marvis || []).length ? `<span style="font-size:11px;background:rgba(239,68,68,0.15);color:var(--red);padding:2px 8px;border-radius:99px;font-weight:600">${data.marvis.length}</span>` : ""}
+        </div>
+        <div class="alarm-list">${alarmHtml}</div>
+      </div>`;
+
+    loadEl.style.display = "none";
+    contEl.style.display = "block";
+
+  } catch (err) {
+    loadEl.style.display = "none";
+    errEl.style.display  = "block";
+    errEl.textContent    = `Error loading health data: ${err.message}`;
+  }
+}
+
+function categoryAvgForSite(sites, siteId) {
+  const site = (sites || []).find(s => s.site_id === siteId);
+  if (!site) return null;
+  return siteAvg(site);
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

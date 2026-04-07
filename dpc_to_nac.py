@@ -892,5 +892,152 @@ def api_apply(org_id):
 
 
 
+# ── Network Health routes ─────────────────────────────────────────────────────
+
+@app.route("/health/<org_id>")
+def health(org_id):
+    if not valid_uuid(org_id):
+        return redirect(url_for("orgs"))
+    sid = get_authed_sid()
+    if not sid:
+        return redirect(url_for("login"))
+    if not org_allowed(org_id):
+        return redirect(url_for("orgs"))
+    return render_template("health.html",
+                           org_id=org_id,
+                           user_name=_sessions[sid].get("user_name", ""))
+
+
+def _fetch_sle(sid, org_id):
+    """Fetch SLE for all three categories. Returns dict keyed by category."""
+    end   = int(time.time())
+    start = end - 86400
+    sle   = {}
+    for category in ("wifi", "wired", "wan"):
+        try:
+            raw = mist_get(sid, f"/orgs/{org_id}/insights/sites-sle?sle={category}&start={start}&end={end}")
+            results = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+            sle[category] = results
+        except Exception as e:
+            sle[category] = []
+            _log.warning("SLE %s fetch failed: %s", category, e)
+    return sle
+
+
+def _fetch_site_names(sid, org_id):
+    """Return {site_id: site_name} for the org."""
+    try:
+        raw = mist_get(sid, f"/orgs/{org_id}/sites")
+        sites = raw if isinstance(raw, list) else raw.get("results", [])
+        return {s["id"]: s.get("name", s["id"]) for s in sites if s.get("id")}
+    except Exception:
+        return {}
+
+
+@app.route("/api/health/<org_id>")
+def api_health(org_id):
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    sle        = _fetch_sle(sid, org_id)
+    site_names = _fetch_site_names(sid, org_id)
+
+    # Active alarms — fetch all device types including chassis
+    alarms = []
+    seen_ids = set()
+    alarm_queries = [
+        f"/orgs/{org_id}/alarms/search?status=open&limit=100",
+        f"/orgs/{org_id}/alarms/search?status=open&limit=100&group=infrastructure",
+        f"/orgs/{org_id}/alarms/search?status=open&limit=100&group=marvis",
+    ]
+    for query in alarm_queries:
+        try:
+            raw     = mist_get(sid, query)
+            results = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+            for a in results:
+                aid = a.get("id") or f"{a.get('type')}-{a.get('timestamp')}-{a.get('site_id')}"
+                if aid not in seen_ids:
+                    seen_ids.add(aid)
+                    alarms.append(a)
+        except Exception as e:
+            _log.warning("Alarms query failed (%s): %s", query, e)
+
+    # Sort by severity then timestamp (most recent first)
+    sev_order = {"critical": 0, "major": 1, "minor": 2, "warn": 3, "info": 4}
+    alarms.sort(key=lambda a: (
+        sev_order.get((a.get("severity") or "").lower(), 9),
+        -(a.get("timestamp") or 0)
+    ))
+
+    marvis = [{
+        "title":     a.get("type", "Alarm"),
+        "site_name": a.get("site_name", ""),
+        "severity":  a.get("severity", ""),
+        "group":     a.get("group", ""),
+        "hostnames": a.get("hostnames", []),
+        "count":     a.get("count", 1),
+        "timestamp": a.get("timestamp"),
+    } for a in alarms]
+
+    cloud_host  = _sessions[sid]["cloud_host"]
+    manage_host = cloud_host.replace("api.", "manage.", 1)
+
+    return jsonify({
+        "sle":        sle,
+        "site_names": site_names,
+        "manage_host": manage_host,
+        "marvis":     marvis,
+    })
+
+
+@app.route("/site/<org_id>/<site_id>")
+def site_health(org_id, site_id):
+    if not valid_uuid(org_id) or not valid_uuid(site_id):
+        return redirect(url_for("orgs"))
+    sid = get_authed_sid()
+    if not sid:
+        return redirect(url_for("login"))
+    if not org_allowed(org_id):
+        return redirect(url_for("orgs"))
+    return render_template("site_health.html",
+                           org_id=org_id,
+                           site_id=site_id,
+                           user_name=_sessions[sid].get("user_name", ""))
+
+
+@app.route("/api/site/<org_id>/<site_id>")
+def api_site_health(org_id, site_id):
+    if not valid_uuid(org_id) or not valid_uuid(site_id):
+        return jsonify({"error": "Invalid ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    sle_all    = _fetch_sle(sid, org_id)
+    site_names = _fetch_site_names(sid, org_id)
+
+    # Filter each category down to just this site
+    sle = {cat: [s for s in sites if s.get("site_id") == site_id]
+           for cat, sites in sle_all.items()}
+
+    cloud_host  = _sessions[sid]["cloud_host"]
+    manage_host = cloud_host.replace("api.", "manage.", 1)
+    dashboard_url = f"https://{manage_host}/admin/?org_id={org_id}#!insights/wifi/{site_id}"
+
+    return jsonify({
+        "sle":           sle,
+        "site_name":     site_names.get(site_id, site_id),
+        "manage_host":   manage_host,
+        "dashboard_url": dashboard_url,
+    })
+
+
 if __name__ == "__main__":
     app.run(debug=False, port=5001)

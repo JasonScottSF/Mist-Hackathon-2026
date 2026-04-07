@@ -274,6 +274,22 @@
       color: #fff; font-size: 13px; font-weight: 600;
     }
     .btn-confirm:hover { opacity: 0.88; }
+
+    /* ── Tab bar ── */
+    .tab-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; display: flex; align-items: flex-end; gap: 4px;
+    }
+    .tab {
+      font-size: 13px; font-weight: 500; color: var(--muted);
+      padding: 10px 16px; border-bottom: 2px solid transparent;
+      cursor: pointer; text-decoration: none; white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--purple); }
   </style>
 </head>
 <body>
@@ -289,6 +305,11 @@
     <a class="btn-ghost" href="/logout">Sign out</a>
   </div>
 </header>
+
+<nav class="tab-bar">
+  <a class="tab"        data-tab-id="health" href="/health/{{ org_id }}">&#128246; Network Health</a>
+  <a class="tab active" data-tab-id="dpc"    href="/scan/{{ org_id }}">&#8644; DPC → NAC</a>
+</nav>
 
 <main>
   <div class="page-title">Preview &amp; Apply</div>

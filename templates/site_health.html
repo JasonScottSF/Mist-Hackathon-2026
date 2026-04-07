@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Health</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #20243a;
+      --border: #2a2d3a; --text: #e8eaf0; --muted: #6b7280;
+      --purple: #7c3aed; --indigo: #4f46e5;
+      --green: #22c55e; --yellow: #f59e0b; --red: #ef4444; --blue: #3b82f6;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--purple), var(--indigo));
+      border-radius: 8px; display: flex; align-items: center;
+      justify-content: center; font-size: 15px; color: #fff;
+    }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .user-name { font-size: 13px; color: var(--muted); }
+    .btn-ghost {
+      font-size: 13px; padding: 6px 14px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+    .btn-mist {
+      font-size: 13px; padding: 6px 14px; border-radius: 6px;
+      background: linear-gradient(135deg, var(--purple), var(--indigo));
+      border: none; color: #fff; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 6px; font-weight: 500;
+    }
+    .btn-mist:hover { opacity: 0.88; }
+
+    .tab-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; display: flex; align-items: flex-end; gap: 4px;
+    }
+    .tab {
+      font-size: 13px; font-weight: 500; color: var(--muted);
+      padding: 10px 16px; border-bottom: 2px solid transparent;
+      text-decoration: none; white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+      display: flex; align-items: center; gap: 6px; margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--purple); }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 36px 28px 80px; }
+
+    .page-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 32px; gap: 16px; flex-wrap: wrap;
+    }
+    .page-title { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .page-sub { font-size: 14px; color: var(--muted); }
+
+    #loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 16px; min-height: 300px; color: var(--muted);
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--purple); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error-banner {
+      display: none; background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3); border-radius: 10px;
+      color: #f87171; padding: 14px 18px; margin-bottom: 24px; font-size: 13px;
+    }
+    #content { display: none; }
+
+    .section { margin-bottom: 36px; }
+    .section-title {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted);
+      display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+    }
+    .section-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+    .sle-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .sle-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .sle-label {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.06em; line-height: 1.3;
+    }
+    .sle-score { font-size: 34px; font-weight: 700; line-height: 1; }
+    .sle-score.green  { color: var(--green); }
+    .sle-score.yellow { color: var(--yellow); }
+    .sle-score.red    { color: var(--red); }
+    .sle-bar { height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .sle-fill { height: 100%; border-radius: 99px; transition: width 0.5s ease; }
+    .sle-fill.green  { background: var(--green); }
+    .sle-fill.yellow { background: var(--yellow); }
+    .sle-fill.red    { background: var(--red); }
+
+    .no-data { font-size: 13px; color: var(--muted); padding: 12px 0; }
+    .back-link { font-size: 13px; color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+    .back-link:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">&#8644;</div>
+    DPC → NAC Converter
+  </div>
+  <div class="header-right">
+    <span class="user-name">{{ user_name }}</span>
+    <a class="btn-ghost" href="/orgs">&#8592; Orgs</a>
+    <a class="btn-ghost" href="/logout">Sign out</a>
+  </div>
+</header>
+
+<nav class="tab-bar">
+  <a class="tab active" data-tab-id="health" href="/health/{{ org_id }}">&#128246; Network Health</a>
+  <a class="tab"        data-tab-id="dpc"    href="/scan/{{ org_id }}">&#8644; DPC → NAC</a>
+</nav>
+
+<main>
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Fetching site health data…</span>
+  </div>
+  <div id="error-banner"></div>
+  <div id="content"></div>
+</main>
+
+<script>
+const ORG_ID  = {{ org_id  | tojson }};
+const SITE_ID = {{ site_id | tojson }};
+
+const SLE_META = {
+  "ap-availability":     "AP Availability",
+  "ap-health":           "AP Health",
+  "ap-redundancy":       "AP Redundancy",
+  "successful-connect":  "Successful Connect",
+  "time-to-connect":     "Time to Connect",
+  "coverage":            "Coverage",
+  "capacity":            "Capacity",
+  "throughput":          "Throughput",
+  "roaming":             "Roaming",
+  "switch-health":       "Switch Health",
+  "switch-health-v2":    "Switch Health",
+  "switch-throughput":   "Switch Throughput",
+  "switch-bandwidth":    "Switch Bandwidth",
+  "switch-bandwidth-v2": "Switch Bandwidth",
+  "gateway-health":      "Gateway Health",
+  "gateway-bandwidth":   "Gateway Bandwidth",
+  "wan-link-health":     "WAN Link Health",
+  "wan-link-health-v2":  "WAN Link Health",
+  "application_health":  "Application Health",
+};
+
+const SKIP_KEYS = new Set(["site_id", "num_aps", "num_clients", "num_switches", "num_gateways"]);
+
+function scoreColor(v) {
+  if (v >= 0.95) return "green";
+  if (v >= 0.75) return "yellow";
+  return "red";
+}
+
+function renderSleCards(siteObj) {
+  if (!siteObj) return `<div class="no-data">No data for this category.</div>`;
+  const entries = Object.entries(siteObj).filter(([k, v]) => !SKIP_KEYS.has(k) && typeof v === "number");
+  if (!entries.length) return `<div class="no-data">No data for this category.</div>`;
+  return `<div class="sle-grid">` + entries.map(([key, val]) => {
+    const pct   = Math.round(val * 100);
+    const cls   = scoreColor(val);
+    const label = SLE_META[key] || key;
+    return `
+      <div class="sle-card">
+        <div class="sle-label">${label}</div>
+        <div class="sle-score ${cls}">${pct}%</div>
+        <div class="sle-bar"><div class="sle-fill ${cls}" style="width:${pct}%"></div></div>
+      </div>`;
+  }).join("") + `</div>`;
+}
+
+async function load() {
+  const loadEl = document.getElementById("loading");
+  const errEl  = document.getElementById("error-banner");
+  const contEl = document.getElementById("content");
+
+  loadEl.style.display = "flex";
+  contEl.style.display = "none";
+  errEl.style.display  = "none";
+
+  try {
+    const res  = await fetch(`/api/site/${ORG_ID}/${SITE_ID}`);
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.error === "Not authenticated") { window.location.href = "/login"; return; }
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    const siteName    = data.site_name || SITE_ID;
+    const dashUrl     = data.dashboard_url || "#";
+    const wifiSite    = (data.sle.wifi  || []).find(s => s.site_id === SITE_ID);
+    const wiredSite   = (data.sle.wired || []).find(s => s.site_id === SITE_ID);
+    const wanSite     = (data.sle.wan   || []).find(s => s.site_id === SITE_ID);
+
+    contEl.innerHTML = `
+      <div class="page-header">
+        <div>
+          <a class="back-link" href="/health/${ORG_ID}">&#8592; Back to org health</a>
+          <div class="page-title" style="margin-top:8px">&#128205; ${siteName}</div>
+          <div class="page-sub">SLE scores — last 24 hours &nbsp;
+            <code style="font-size:11px;color:#a78bfa">${SITE_ID}</code>
+          </div>
+        </div>
+        <a class="btn-mist" href="${dashUrl}" target="_blank" rel="noopener">
+          &#128279; View in Mist Dashboard
+        </a>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span class="section-dot" style="background:var(--blue)"></span>WiFi SLE
+        </div>
+        ${renderSleCards(wifiSite)}
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span class="section-dot" style="background:var(--green)"></span>Wired SLE
+        </div>
+        ${renderSleCards(wiredSite)}
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span class="section-dot" style="background:var(--yellow)"></span>WAN SLE
+        </div>
+        ${renderSleCards(wanSite)}
+      </div>`;
+
+    loadEl.style.display = "none";
+    contEl.style.display = "block";
+
+  } catch (err) {
+    loadEl.style.display = "none";
+    errEl.style.display  = "block";
+    errEl.textContent    = `Error loading site data: ${err.message}`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

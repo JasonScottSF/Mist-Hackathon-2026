@@ -95,6 +95,22 @@
       border-radius: 8px; color: #f87171; font-size: 13px;
       padding: 10px 14px; margin-top: 10px;
     }
+
+    /* ── Tab bar ── */
+    .tab-bar {
+      background: #1a1d27; border-bottom: 1px solid #2a2d3a;
+      padding: 0 28px; display: flex; align-items: flex-end; gap: 4px;
+    }
+    .tab {
+      font-size: 13px; font-weight: 500; color: #6b7280;
+      padding: 10px 16px; border-bottom: 2px solid transparent;
+      cursor: pointer; text-decoration: none; white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: #e8eaf0; }
+    .tab.active { color: #e8eaf0; border-bottom-color: #7c3aed; }
   </style>
 </head>
 <body>
@@ -108,6 +124,11 @@
       <a href="/logout"><button class="logout-btn">Sign out</button></a>
     </div>
   </header>
+
+  <nav class="tab-bar">
+    <a class="tab active" data-tab-id="dpc" href="/orgs">&#8644; DPC → NAC</a>
+    <!-- Future tabs go here -->
+  </nav>
 
   <main>
     <div class="page-title">Select an organization</div>
