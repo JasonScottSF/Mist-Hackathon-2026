@@ -1,0 +1,23 @@
+services:
+  mist-health:
+    build: .
+    command: gunicorn -b 0.0.0.0:5000 -w 2 app:app
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  dpc-to-nac:
+    build: .
+    # Single worker + threads keeps the in-memory session dict coherent.
+    # If you move to a proper session store (Redis etc.) you can raise -w.
+    command: gunicorn -b 0.0.0.0:5001 -w 1 --threads 4 dpc_to_nac:app
+    ports:
+      - "5001:5001"
+    volumes:
+      - dpc-secrets:/app/secrets
+    environment:
+      - FLASK_SECRET_DIR=/app/secrets
+    restart: unless-stopped
+
+volumes:
+  dpc-secrets:

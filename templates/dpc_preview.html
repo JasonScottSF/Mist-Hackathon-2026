@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DPC → NAC — Preview &amp; Apply</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #20243a;
+      --border: #2a2d3a; --text: #e8eaf0; --muted: #6b7280;
+      --purple: #7c3aed; --indigo: #4f46e5; --green: #22c55e;
+      --yellow: #f59e0b; --red: #ef4444; --blue: #3b82f6;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--purple), var(--indigo));
+      border-radius: 8px; display: flex; align-items: center;
+      justify-content: center; font-size: 15px; color: #fff;
+    }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .user-name { font-size: 13px; color: var(--muted); }
+    .btn-ghost {
+      font-size: 13px; padding: 6px 14px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center;
+    }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+
+    main { max-width: 1100px; margin: 0 auto; padding: 36px 28px 80px; }
+    .page-title { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .page-sub { font-size: 14px; color: var(--muted); margin-bottom: 32px; }
+
+    #loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 16px; min-height: 300px; color: var(--muted);
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--purple); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error-banner {
+      display: none; background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3); border-radius: 10px;
+      color: #f87171; padding: 14px 18px; margin-bottom: 24px; font-size: 13px;
+    }
+    #content { display: none; }
+
+    .steps {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 32px; font-size: 13px;
+    }
+    .step { color: var(--muted); }
+    .step.active { color: var(--text); font-weight: 600; }
+    .step-sep { color: var(--border); }
+
+    .section { margin-bottom: 36px; }
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: 13px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--muted);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .count-badge {
+      font-size: 12px; padding: 2px 8px; border-radius: 99px;
+      background: rgba(124,58,237,0.15); color: #a78bfa; font-weight: 600;
+    }
+    .btn-add {
+      font-size: 12px; padding: 5px 12px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer;
+    }
+    .btn-add:hover { border-color: var(--purple); color: #a78bfa; background: rgba(124,58,237,0.08); }
+
+    .source-grid { display: flex; flex-direction: column; gap: 10px; }
+    .source-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .source-head {
+      padding: 12px 18px; display: flex; align-items: center;
+      justify-content: space-between; cursor: pointer; user-select: none;
+    }
+    .source-head:hover { background: var(--surface2); }
+    .source-name { font-size: 14px; font-weight: 600; }
+    .source-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .chevron { color: var(--muted); transition: transform 0.2s; font-size: 13px; }
+    .chevron.open { transform: rotate(90deg); }
+    .source-body { display: none; border-top: 1px solid var(--border); }
+    .source-body.open { display: block; }
+    .rule-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .rule-table th {
+      text-align: left; padding: 8px 18px; color: var(--muted);
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2);
+    }
+    .rule-table td { padding: 9px 18px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .rule-table tr:last-child td { border-bottom: none; }
+    .rule-table tr:hover td { background: var(--surface2); }
+    .tag-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 500; margin: 1px 2px;
+      background: rgba(124,58,237,0.12); color: #a78bfa; font-family: monospace;
+    }
+    .usage-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 600;
+      background: rgba(59,130,246,0.12); color: #93c5fd;
+    }
+
+    .prop-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .prop-table th {
+      text-align: left; padding: 10px 16px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .prop-table td {
+      padding: 11px 16px; border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .prop-table tr:last-child td { border-bottom: none; }
+    .prop-table tr:hover td { background: var(--surface2); }
+    .prop-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+
+    .match-type {
+      font-size: 11px; padding: 2px 7px; border-radius: 4px;
+      font-weight: 600; letter-spacing: 0.03em;
+    }
+    .match-mac    { background: rgba(245,158,11,0.12); color: var(--yellow); }
+    .match-lldp   { background: rgba(34,197,94,0.12);  color: var(--green); }
+    .match-manual { background: rgba(59,130,246,0.12); color: #93c5fd; }
+
+    .vlan-pill {
+      font-size: 11px; padding: 2px 8px; border-radius: 4px;
+      background: rgba(59,130,246,0.12); color: #93c5fd;
+      font-family: monospace; font-weight: 600;
+    }
+    .no-vlan { color: var(--muted); font-size: 12px; font-style: italic; }
+
+    .edit-input {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: 13px; padding: 5px 10px; width: 100%;
+      outline: none;
+    }
+    .edit-input:focus { border-color: var(--purple); }
+    .values-edit { font-size: 12px; color: var(--muted); font-family: monospace; }
+
+    .btn-delete {
+      background: transparent; border: none; color: var(--muted);
+      cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px;
+      line-height: 1;
+    }
+    .btn-delete:hover { color: var(--red); background: rgba(239,68,68,0.1); }
+
+    #apply-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 14px 28px; display: none;
+      align-items: center; justify-content: space-between; z-index: 30;
+    }
+    #apply-bar.visible { display: flex; }
+    .apply-summary { font-size: 14px; color: var(--muted); }
+    .apply-summary strong { color: var(--text); }
+    .btn-apply {
+      padding: 10px 28px; border-radius: 8px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--purple), var(--indigo));
+      color: #fff; font-size: 14px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .btn-apply:hover { opacity: 0.88; }
+    .btn-apply:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #result-panel { display: none; margin-top: 32px; }
+    .result-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; margin-bottom: 20px;
+    }
+    .result-head {
+      padding: 12px 18px; border-bottom: 1px solid var(--border);
+      font-size: 14px; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .result-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 18px; border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .result-row:last-child { border-bottom: none; }
+    .status-created { color: var(--green);  font-size: 12px; font-weight: 600; }
+    .status-error   { color: var(--red);    font-size: 12px; font-weight: 600; }
+    .status-skipped { color: var(--yellow); font-size: 12px; font-weight: 600; }
+    .status-exists  { color: var(--muted);  font-size: 12px; font-weight: 600; }
+    .result-name { flex: 1; font-family: monospace; }
+    .result-id { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+    .no-dpc {
+      text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14px;
+    }
+
+    /* ── Modals ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: none; align-items: center; justify-content: center;
+      z-index: 50; padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; width: 100%; max-width: 480px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    }
+    .modal-head {
+      padding: 18px 22px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-close {
+      background: transparent; border: none; color: var(--muted);
+      cursor: pointer; font-size: 20px; line-height: 1; padding: 2px 6px;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 22px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; max-height: 65vh; }
+    .modal-card { display: flex; flex-direction: column; }
+    .modal-field label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 5px; }
+    .modal-input {
+      width: 100%; padding: 9px 12px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: 13px; outline: none;
+    }
+    .modal-input:focus { border-color: var(--purple); }
+    .modal-select {
+      width: 100%; padding: 9px 12px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: 13px; outline: none;
+      appearance: none; cursor: pointer;
+    }
+    .modal-select:focus { border-color: var(--purple); }
+    .modal-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .modal-error { font-size: 12px; color: #f87171; margin-top: -4px; display: none; }
+    .modal-foot {
+      padding: 16px 22px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 10px;
+    }
+    .btn-cancel {
+      padding: 8px 18px; border-radius: 7px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); cursor: pointer; font-size: 13px;
+    }
+    .btn-cancel:hover { background: var(--surface2); }
+    .btn-confirm {
+      padding: 8px 20px; border-radius: 7px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--purple), var(--indigo));
+      color: #fff; font-size: 13px; font-weight: 600;
+    }
+    .btn-confirm:hover { opacity: 0.88; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">&#8644;</div>
+    DPC → NAC Converter
+  </div>
+  <div class="header-right">
+    <span class="user-name">{{ user_name }}</span>
+    <a class="btn-ghost" href="/orgs">&#8592; Orgs</a>
+    <a class="btn-ghost" href="/logout">Sign out</a>
+  </div>
+</header>
+
+<main>
+  <div class="page-title">Preview &amp; Apply</div>
+  <div class="page-sub">Org ID: <code style="font-size:12px;color:#a78bfa" id="org-id-display"></code></div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Scanning Dynamic Port Config rules…</span>
+  </div>
+
+  <div id="error-banner"></div>
+
+  <div id="content">
+    <div class="steps">
+      <span class="step active">1. Review DPC rules</span>
+      <span class="step-sep">›</span>
+      <span class="step" id="step2">2. Proposed NAC objects</span>
+      <span class="step-sep">›</span>
+      <span class="step" id="step3">3. Apply</span>
+    </div>
+
+    <!-- DPC source rules -->
+    <div class="section" id="section-sources">
+      <div class="section-header">
+        <div class="section-title">
+          <span class="section-dot" style="color:#f59e0b"></span>
+          DPC Rules Found
+          <span class="count-badge" id="src-count">0</span>
+        </div>
+      </div>
+      <div class="source-grid" id="source-grid">
+        <div class="no-dpc">No Dynamic Port Config rules found in any network template.</div>
+      </div>
+    </div>
+
+    <!-- Proposed endpoints -->
+    <div class="section" id="section-endpoints" style="display:none">
+      <div class="section-header">
+        <div class="section-title">
+          <span class="section-dot" style="color:#f59e0b"></span>
+          Endpoints (usermacs)
+          <span class="count-badge" id="ep-count">0</span>
+        </div>
+        <button class="btn-add" onclick="openModal('endpoint')">+ Add manually</button>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+        Wired clients seen in the last 7 days whose MAC or LLDP name matches a DPC rule.
+        Each will be created as a Mist endpoint with the corresponding label.
+      </p>
+      <div class="prop-box">
+        <table class="prop-table" id="endpoints-table">
+          <thead>
+            <tr>
+              <th>MAC</th>
+              <th>Name / Manufacturer</th>
+              <th>Matched On</th>
+              <th>Label</th>
+              <th>Usage</th>
+              <th></th>
+
+            </tr>
+          </thead>
+          <tbody id="endpoints-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- Proposed NAC tags -->
+    <div class="section" id="section-tags" style="display:none">
+      <div class="section-header">
+        <div class="section-title">
+          <span class="section-dot" style="color:#a78bfa"></span>
+          NAC Tags
+          <span class="count-badge" id="tag-count">0</span>
+        </div>
+        <button class="btn-add" onclick="openModal('tag')">+ Add manually</button>
+      </div>
+      <div class="prop-box">
+        <table class="prop-table" id="tags-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Match On</th>
+              <th>Values / VLAN</th>
+              <th>Usage</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tags-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Proposed NAC rules -->
+    <div class="section" id="section-rules" style="display:none">
+      <div class="section-header">
+        <div class="section-title">
+          <span class="section-dot" style="color:#22c55e"></span>
+          NAC Rules
+          <span class="count-badge" id="rule-count">0</span>
+        </div>
+        <button class="btn-add" onclick="openModal('rule')">+ Add manually</button>
+      </div>
+      <div class="prop-box">
+        <table class="prop-table" id="rules-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Rule Name</th>
+              <th>Classifier Tags</th>
+              <th>Result Tags</th>
+              <th>Action</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rules-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Apply results -->
+    <div id="result-panel">
+      <div class="section-title" style="margin-bottom:16px;color:var(--green)">
+        <span class="section-dot" style="color:var(--green)"></span>
+        Apply Results
+      </div>
+      <div class="result-box">
+        <div class="result-head">Endpoints (usermacs)</div>
+        <div id="result-endpoints"></div>
+      </div>
+      <div class="result-box">
+        <div class="result-head">NAC Tags</div>
+        <div id="result-tags"></div>
+      </div>
+      <div class="result-box">
+        <div class="result-head">NAC Rules</div>
+        <div id="result-rules"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Apply bar -->
+<div id="apply-bar">
+  <div class="apply-summary">
+    Ready to create <strong id="bar-ep-count">0</strong> endpoints,
+    <strong id="bar-tag-count">0</strong> tags, and
+    <strong id="bar-rule-count">0</strong> rules.
+  </div>
+  <button class="btn-apply" id="apply-btn" onclick="applyAll()">
+    &#10003; Create in Mist
+  </button>
+</div>
+
+<!-- ── Modal: Add Endpoint ── -->
+<div class="modal-overlay" id="modal-endpoint">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">Add Endpoint Manually</div>
+      <button class="modal-close" onclick="closeModal('endpoint')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <label>MAC Address *</label>
+        <input class="modal-input" id="new-ep-mac" placeholder="aa:bb:cc:dd:ee:ff" style="font-family:monospace">
+      </div>
+      <div class="modal-field">
+        <label>Name *</label>
+        <input class="modal-input" id="new-ep-name" placeholder="e.g. Lobby Printer">
+      </div>
+      <div class="modal-field">
+        <label>Label *</label>
+        <input class="modal-input" id="new-ep-label" placeholder="e.g. dpc-iot" style="font-family:monospace" list="existing-labels">
+        <datalist id="existing-labels"></datalist>
+        <div class="modal-hint">Must match the label on the corresponding NAC classifier tag.</div>
+      </div>
+      <div class="modal-field">
+        <label>Role <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input class="modal-input" id="new-ep-role" placeholder="e.g. iot-device">
+      </div>
+      <div class="modal-field">
+        <label>VLAN <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input class="modal-input" id="new-ep-vlan" placeholder="e.g. 100" style="font-family:monospace">
+      </div>
+      <div class="modal-field">
+        <label>Description <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input class="modal-input" id="new-ep-desc" placeholder="e.g. 3rd floor conference room">
+      </div>
+      <div class="modal-error" id="ep-error"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('endpoint')">Cancel</button>
+      <button class="btn-confirm" onclick="submitAddEndpoint()">Add Endpoint</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: Add NAC Tag ── -->
+<div class="modal-overlay" id="modal-tag">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">Add NAC Tag Manually</div>
+      <button class="modal-close" onclick="closeModal('tag')">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="modal-field">
+        <label>Tag Name *</label>
+        <input class="modal-input" id="new-tag-name" placeholder="e.g. Match-Role-IoT" style="font-family:monospace">
+      </div>
+
+      <!-- Label Type -->
+      <div class="modal-field">
+        <label>Label Type *</label>
+        <select class="modal-select" id="new-tag-label-type" onchange="onTagLabelTypeChange()">
+          <option value="aaa">AAA Attribute</option>
+          <option value="cert">Certificate Attribute</option>
+          <option value="client_list">Client List</option>
+          <option value="directory">Directory Attribute</option>
+          <option value="ssid">SSID</option>
+          <option value="mdm">MDM Compliance</option>
+          <option value="client_label">Client Label</option>
+          <option value="redirect">Redirect Guest Portal</option>
+        </select>
+      </div>
+
+      <!-- Label Values sub-select (AAA / Certificate) -->
+      <div class="modal-field" id="tag-label-values-select-field">
+        <label>Label Values *</label>
+        <select class="modal-select" id="new-tag-label-values" onchange="onTagLabelValuesChange()"></select>
+      </div>
+
+      <!-- Free-text values (most match types) -->
+      <div class="modal-field" id="tag-values-field" style="display:none">
+        <label>Values <span style="font-weight:400;color:var(--muted)">(one per line or comma-separated)</span></label>
+        <textarea class="modal-input values-edit" id="new-tag-vals" rows="3"
+          placeholder="value1&#10;value2" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+      </div>
+
+      <!-- MDM Compliance checkboxes -->
+      <div class="modal-field" id="tag-mdm-field" style="display:none">
+        <label>Status</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:2px">
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="tag-mdm-compliant" checked> Compliant
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="tag-mdm-noncompliant"> Non-Compliant
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="tag-mdm-unknown"> Unknown
+          </label>
+        </div>
+      </div>
+
+      <!-- VLAN ID -->
+      <div class="modal-field" id="tag-vlan-field" style="display:none">
+        <label>VLAN ID *</label>
+        <input class="modal-input" id="new-tag-vlan" placeholder="e.g. 100" style="font-family:monospace">
+      </div>
+
+      <!-- GBP Tag number -->
+      <div class="modal-field" id="tag-gbp-field" style="display:none">
+        <label>GBP Tag <span style="font-weight:400;color:var(--muted)">(1–65535)</span></label>
+        <input class="modal-input" id="new-tag-gbp" type="number" min="1" max="65535" placeholder="e.g. 1000" style="font-family:monospace">
+      </div>
+
+      <!-- Session Timeout (seconds) -->
+      <div class="modal-field" id="tag-session-timeout-field" style="display:none">
+        <label>Timeout <span style="font-weight:400;color:var(--muted)">(seconds)</span></label>
+        <input class="modal-input" id="new-tag-session-timeout" type="number" min="1" placeholder="e.g. 86400" style="font-family:monospace">
+      </div>
+
+      <!-- Returned User Name attribute selector -->
+      <div class="modal-field" id="tag-username-attr-field" style="display:none">
+        <label>Attribute</label>
+        <select class="modal-select" id="new-tag-username-attr">
+          <option value="automatic">Automatic</option>
+          <option value="cn">Common Name (CN)</option>
+          <option value="dns">DNS</option>
+          <option value="email">Email</option>
+          <option value="upn">UPN</option>
+        </select>
+      </div>
+
+      <!-- Egress VLAN names (Dynamic Wired Port Config) -->
+      <div class="modal-field" id="tag-egress-vlan-field" style="display:none">
+        <label>VLAN Names <span style="font-weight:400;color:var(--muted)">(one per line)</span></label>
+        <textarea class="modal-input" id="new-tag-egress-vlans" rows="3"
+          placeholder="vlan-iot&#10;vlan-guest" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+      </div>
+
+      <!-- Custom Standard RADIUS Attributes -->
+      <div class="modal-field" id="tag-radius-attrs-field" style="display:none">
+        <label>RADIUS Attributes <span style="font-weight:400;color:var(--muted)">(one per line)</span></label>
+        <textarea class="modal-input" id="new-tag-radius-attrs" rows="3"
+          placeholder="Tunnel-Type=VLAN&#10;Tunnel-Medium-Type=6" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+        <div class="modal-hint">Format: Attribute-Name=value</div>
+      </div>
+
+      <!-- Custom Vendor Specific Attributes -->
+      <div class="modal-field" id="tag-vendor-attrs-field" style="display:none">
+        <label>Vendor Attributes <span style="font-weight:400;color:var(--muted)">(one per line)</span></label>
+        <textarea class="modal-input" id="new-tag-vendor-attrs" rows="3"
+          placeholder="Cisco-AVPair=shell:priv-lvl=15" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+        <div class="modal-hint">Format: VendorAttribute=value</div>
+      </div>
+
+      <!-- Redirect Guest Portal ID -->
+      <div class="modal-field" id="tag-portal-field" style="display:none">
+        <label>Portal ID</label>
+        <input class="modal-input" id="new-tag-portal-id" placeholder="Guest portal UUID" style="font-family:monospace">
+      </div>
+
+      <!-- Match All (AND logic) — shown for match types with values -->
+      <div class="modal-field" id="tag-matchall-field" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0">
+          <input type="checkbox" id="new-tag-matchall">
+          <span style="font-size:13px;color:var(--text)">All values must match (AND logic)</span>
+        </label>
+      </div>
+
+      <div class="modal-error" id="tag-error"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('tag')">Cancel</button>
+      <button class="btn-confirm" onclick="submitAddTag()">Add Tag</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: Add NAC Rule ── -->
+<div class="modal-overlay" id="modal-rule">
+  <div class="modal-card" style="max-width:560px">
+    <div class="modal-head">
+      <div class="modal-title">Add NAC Rule</div>
+      <button class="modal-close" onclick="closeModal('rule')">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="modal-field">
+        <label>Rule Name *</label>
+        <input class="modal-input" id="new-rule-name" placeholder="e.g. Allow-IoT-Devices" style="font-family:monospace">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end">
+        <div class="modal-field" style="margin:0">
+          <label>Action</label>
+          <select class="modal-select" id="new-rule-action" onchange="onRuleActionChange()">
+            <option value="allow">Allow</option>
+            <option value="block">Block</option>
+          </select>
+        </div>
+        <div class="modal-field" style="margin:0">
+          <label>Order</label>
+          <input class="modal-input" id="new-rule-order" type="number" min="1" placeholder="auto" style="font-family:monospace">
+        </div>
+        <div class="modal-field" style="margin:0;padding-bottom:2px">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:0">
+            <input type="checkbox" id="new-rule-enabled" checked>
+            <span style="font-size:13px;color:var(--text)">Enabled</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- ── Matching ─────────────────────────────────────── -->
+      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px">Matching</div>
+
+        <div class="modal-field">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label style="margin:0">NAC Tags <span style="font-weight:400;color:var(--muted)">(classifier)</span></label>
+            <button class="btn-ghost" style="font-size:11px;padding:3px 9px" onclick="openRuleTagAdd('classifier')">+ New Tag</button>
+          </div>
+          <div id="rule-clf-tags-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px"></div>
+          <div style="margin-top:7px">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--muted)">
+              <input type="checkbox" id="new-rule-all-tags">
+              All selected tags must match (AND)
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-field">
+          <label>Auth Type <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <select class="modal-select" id="new-rule-auth-type">
+            <option value="">Any</option>
+            <option value="cert">Certificate (cert)</option>
+            <option value="eap-tls">EAP-TLS</option>
+            <option value="eap-ttls">EAP-TTLS</option>
+            <option value="eap-teap">EAP-TEAP</option>
+            <option value="eap-peap">EAP-PEAP</option>
+            <option value="mab">MAC Auth Bypass (mab)</option>
+            <option value="device-auth">Device Auth</option>
+            <option value="idp">IdP / SSO</option>
+          </select>
+        </div>
+
+        <div class="modal-field">
+          <label>Port Types <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <div style="display:flex;gap:20px;margin-top:2px">
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="rule-port-wired"> Wired
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="rule-port-wireless"> Wireless
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Apply Tags (Allow only) ──────────────────────── -->
+      <div id="rule-apply-section" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Apply Tags <span style="font-weight:400;text-transform:none;letter-spacing:0">(result)</span></div>
+          <button class="btn-ghost" style="font-size:11px;padding:3px 9px" onclick="openRuleTagAdd('result')">+ New Tag</button>
+        </div>
+        <div id="rule-res-tags-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px"></div>
+      </div>
+
+      <div class="modal-error" id="rule-error"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('rule')">Cancel</button>
+      <button class="btn-confirm" onclick="submitAddRule()">Add Rule</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ORG_ID = window.location.pathname.split("/").pop();
+document.getElementById("org-id-display").textContent = ORG_ID;
+
+let proposedTags      = [];
+let proposedRules     = [];
+let proposedEndpoints = [];
+
+// ── Modal helpers ─────────────────────────────────────────────────────────────
+function openModal(id) {
+  document.getElementById("modal-" + id).classList.add("open");
+  if (id === "rule") { renderRuleTagPicker(); onRuleActionChange(); }
+}
+function closeModal(id) {
+  document.getElementById("modal-" + id).classList.remove("open");
+  const err = document.getElementById(id.split("-")[0] + "-error") || document.getElementById(id + "-error");
+  if (err) err.style.display = "none";
+  if (id === "tag" && _pendingRule !== null) restoreRuleModal();
+}
+// Close on backdrop click
+document.querySelectorAll(".modal-overlay").forEach(el => {
+  el.addEventListener("click", e => { if (e.target === el) closeModal(el.id.replace("modal-", "")); });
+});
+
+// ── Rule ↔ Tag modal interop ──────────────────────────────────────────────────
+let _pendingRule = null;
+
+function renderRuleTagPicker() {
+  const clfDiv = document.getElementById("rule-clf-tags-list");
+  const resDiv = document.getElementById("rule-res-tags-list");
+  if (!clfDiv || !resDiv) return;
+
+  const prevClf = new Set([...document.querySelectorAll('input[name="rule-clf-tag"]:checked')].map(el => el.value));
+  const prevRes = new Set([...document.querySelectorAll('input[name="rule-res-tag"]:checked')].map(el => el.value));
+
+  const chip = (tag, inputName, checked) =>
+    `<label style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--surface2);border-radius:5px;cursor:pointer;font-size:12px;white-space:nowrap;border:1px solid transparent" class="rule-tag-chip">
+      <input type="checkbox" name="${inputName}" value="${escHtml(tag.name)}" ${checked ? "checked" : ""}>
+      <span>${escHtml(tag.name)}</span>
+      <span style="color:var(--muted);font-size:10px">${matchLabel(tag.match || tag.type)}</span>
+    </label>`;
+
+  const clfTags = proposedTags.filter(t => t.type === "match");
+  const resTags = proposedTags.filter(t => t.type !== "match");
+
+  clfDiv.innerHTML = clfTags.length
+    ? clfTags.map(t => chip(t, "rule-clf-tag", prevClf.has(t.name))).join("")
+    : `<span style="font-size:12px;color:var(--muted);padding:2px 0">No classifier tags — click + New Tag to add one.</span>`;
+
+  resDiv.innerHTML = resTags.length
+    ? resTags.map(t => chip(t, "rule-res-tag", prevRes.has(t.name))).join("")
+    : `<span style="font-size:12px;color:var(--muted);padding:2px 0">No result tags — click + New Tag to add one.</span>`;
+}
+
+function openRuleTagAdd(context) {
+  _pendingRule = {
+    name:        document.getElementById("new-rule-name").value,
+    order:       document.getElementById("new-rule-order").value,
+    action:      document.getElementById("new-rule-action").value,
+    enabled:     document.getElementById("new-rule-enabled").checked,
+    allTags:     document.getElementById("new-rule-all-tags").checked,
+    authType:    document.getElementById("new-rule-auth-type").value,
+    portWired:   document.getElementById("rule-port-wired").checked,
+    portWireless:document.getElementById("rule-port-wireless").checked,
+    clfChecked:  [...document.querySelectorAll('input[name="rule-clf-tag"]:checked')].map(el => el.value),
+    resChecked:  [...document.querySelectorAll('input[name="rule-res-tag"]:checked')].map(el => el.value),
+    newTagContext: context,
+  };
+  closeModal("rule");
+  openModal("tag");
+}
+
+function restoreRuleModal() {
+  const pr = _pendingRule;
+  _pendingRule = null;
+  document.getElementById("new-rule-name").value        = pr.name;
+  document.getElementById("new-rule-order").value       = pr.order;
+  document.getElementById("new-rule-action").value      = pr.action;
+  document.getElementById("new-rule-enabled").checked   = pr.enabled;
+  document.getElementById("new-rule-all-tags").checked  = pr.allTags;
+  document.getElementById("new-rule-auth-type").value   = pr.authType;
+  document.getElementById("rule-port-wired").checked    = pr.portWired;
+  document.getElementById("rule-port-wireless").checked = pr.portWireless;
+  openModal("rule");  // triggers renderRuleTagPicker + onRuleActionChange
+  // Restore previously checked + auto-check the newly added tag
+  const lastTag = proposedTags.length ? proposedTags[proposedTags.length - 1] : null;
+  pr.clfChecked.forEach(n => {
+    const el = document.querySelector(`input[name="rule-clf-tag"][value="${CSS.escape(n)}"]`);
+    if (el) el.checked = true;
+  });
+  pr.resChecked.forEach(n => {
+    const el = document.querySelector(`input[name="rule-res-tag"][value="${CSS.escape(n)}"]`);
+    if (el) el.checked = true;
+  });
+  if (lastTag) {
+    const name = pr.newTagContext === "classifier" ? "rule-clf-tag" : "rule-res-tag";
+    const el = document.querySelector(`input[name="${name}"][value="${CSS.escape(lastTag.name)}"]`);
+    if (el) el.checked = true;
+  }
+}
+
+function onRuleActionChange() {
+  const isAllow = document.getElementById("new-rule-action").value === "allow";
+  document.getElementById("rule-apply-section").style.display = isAllow ? "block" : "none";
+}
+
+function showModalError(id, msg) {
+  const el = document.getElementById(id + "-error");
+  if (el) { el.textContent = msg; el.style.display = "block"; }
+}
+
+function normalizeMac(raw) {
+  const clean = raw.replace(/[:\-\. ]/g, "").toLowerCase();
+  if (!/^[0-9a-f]{12}$/.test(clean)) return null;
+  return clean.match(/.{2}/g).join(":");
+}
+
+// ── NAC Tag label type / values configuration ─────────────────────────────────
+// Each entry: { value, label, apiType, apiMatch?, input, role? }
+// input values: "values" | "mdm" | "vlan_id" | "gbp_tag" | "session_timeout" |
+//               "username_attr" | "egress_vlan" | "radius_attrs" | "vendor_attrs" | "portal"
+const TAG_AAA_VALUES = [
+  { value:"radius_group",       label:"Role",                              apiType:"match",              apiMatch:"radius_group",    input:"values"          },
+  { value:"vlan",               label:"VLAN",                              apiType:"vlan",                                           input:"vlan_id"         },
+  { value:"realm",              label:"Realm",                             apiType:"match",              apiMatch:"realm",           input:"values"          },
+  { value:"user_name",          label:"User Name",                         apiType:"match",              apiMatch:"user_name",       input:"values"          },
+  { value:"gbp_tag",            label:"GBP Tag",                           apiType:"gbp_tag",                                        input:"gbp_tag"         },
+  { value:"session_timeout",    label:"Session Timeout",                   apiType:"session_timeout",                                input:"session_timeout" },
+  { value:"radius_vendor_attrs",label:"Custom Vendor Specific Attribute",  apiType:"radius_vendor_attrs",                            input:"vendor_attrs"    },
+  { value:"radius_attrs",       label:"Custom Standard RADIUS Attribute",  apiType:"radius_attrs",                                   input:"radius_attrs"    },
+  { value:"egress_vlan_names",  label:"Dynamic Wired Port Configuration",  apiType:"egress_vlan_names",                              input:"egress_vlan"     },
+  { value:"username_attr",      label:"Returned User Name",                apiType:"username_attr",                                  input:"username_attr"   },
+  { value:"ingress_vlan",       label:"Configured Port VLAN ID",           apiType:"match",              apiMatch:"ingress_vlan",    input:"values"          },
+  { value:"nas_ip",             label:"NAS IP Address",                    apiType:"match",              apiMatch:"nas_ip",          input:"values"          },
+];
+const TAG_CERT_VALUES = [
+  { value:"cert_cn",       label:"Common Name (CN)",              apiType:"match", apiMatch:"cert_cn",       input:"values" },
+  { value:"cert_sub",      label:"Subject",                       apiType:"match", apiMatch:"cert_sub",      input:"values" },
+  { value:"cert_serial",   label:"Serial Number",                 apiType:"match", apiMatch:"cert_serial",   input:"values" },
+  { value:"cert_issuer",   label:"Issuer",                        apiType:"match", apiMatch:"cert_issuer",   input:"values" },
+  { value:"cert_san",      label:"Subject Alternative Name (SAN)",apiType:"match", apiMatch:"cert_san",      input:"values" },
+  { value:"cert_eku",      label:"Extended Key Usage (EKU)",      apiType:"match", apiMatch:"cert_eku",      input:"values" },
+  { value:"cert_template", label:"Template",                      apiType:"match", apiMatch:"cert_template", input:"values" },
+];
+const TAG_HAS_SUBSELECT = { aaa: TAG_AAA_VALUES, cert: TAG_CERT_VALUES };
+const TAG_DIRECT = {
+  client_list:  { apiType:"match", apiMatch:"client_mac",    input:"values", role:"classifier" },
+  directory:    { apiType:"match", apiMatch:"idp_role",      input:"values", role:"classifier" },
+  ssid:         { apiType:"match", apiMatch:"ssid",          input:"values", role:"classifier" },
+  mdm:          { apiType:"match", apiMatch:"mdm_status",    input:"mdm",    role:"classifier" },
+  client_label: { apiType:"match", apiMatch:"usermac_label", input:"values", role:"classifier" },
+  redirect:     { apiType:"redirect_nacportal_id",           input:"portal", role:"result"     },
+};
+
+const TAG_ALL_INPUT_FIELDS = [
+  "tag-values-field","tag-mdm-field","tag-vlan-field","tag-gbp-field",
+  "tag-session-timeout-field","tag-username-attr-field","tag-egress-vlan-field",
+  "tag-radius-attrs-field","tag-vendor-attrs-field","tag-portal-field","tag-matchall-field"
+];
+
+function applyTagInputConfig(input) {
+  TAG_ALL_INPUT_FIELDS.forEach(id => document.getElementById(id).style.display = "none");
+  const show = id => document.getElementById(id).style.display = "block";
+  switch (input) {
+    case "values":        show("tag-values-field"); show("tag-matchall-field"); break;
+    case "mdm":           show("tag-mdm-field");            break;
+    case "vlan_id":       show("tag-vlan-field");           break;
+    case "gbp_tag":       show("tag-gbp-field");            break;
+    case "session_timeout": show("tag-session-timeout-field"); break;
+    case "username_attr": show("tag-username-attr-field");  break;
+    case "egress_vlan":   show("tag-egress-vlan-field");    break;
+    case "radius_attrs":  show("tag-radius-attrs-field");   break;
+    case "vendor_attrs":  show("tag-vendor-attrs-field");   break;
+    case "portal":        show("tag-portal-field");         break;
+  }
+}
+
+function onTagLabelTypeChange() {
+  const lt      = document.getElementById("new-tag-label-type").value;
+  const ssField = document.getElementById("tag-label-values-select-field");
+  const ss      = document.getElementById("new-tag-label-values");
+  if (TAG_HAS_SUBSELECT[lt]) {
+    ssField.style.display = "block";
+    ss.innerHTML = TAG_HAS_SUBSELECT[lt].map(o => `<option value="${o.value}">${o.label}</option>`).join("");
+    onTagLabelValuesChange();
+  } else {
+    ssField.style.display = "none";
+    applyTagInputConfig(TAG_DIRECT[lt]?.input || "values");
+  }
+}
+
+function onTagLabelValuesChange() {
+  const lt  = document.getElementById("new-tag-label-type").value;
+  const sel = document.getElementById("new-tag-label-values").value;
+  const opt = (TAG_HAS_SUBSELECT[lt] || []).find(o => o.value === sel);
+  if (opt) applyTagInputConfig(opt.input);
+}
+
+function getCurrentTagCfg() {
+  const lt = document.getElementById("new-tag-label-type").value;
+  if (TAG_HAS_SUBSELECT[lt]) {
+    const sel = document.getElementById("new-tag-label-values").value;
+    return TAG_HAS_SUBSELECT[lt].find(o => o.value === sel);
+  }
+  return TAG_DIRECT[lt];
+}
+
+// ── Add endpoint ──────────────────────────────────────────────────────────────
+function submitAddEndpoint() {
+  const rawMac = document.getElementById("new-ep-mac").value.trim();
+  const mac    = normalizeMac(rawMac);
+  if (!mac) { showModalError("ep", "Invalid MAC address."); return; }
+
+  const label = document.getElementById("new-ep-label").value.trim();
+  if (!label) { showModalError("ep", "Label is required."); return; }
+
+  const name = document.getElementById("new-ep-name").value.trim() || mac;
+  const role = document.getElementById("new-ep-role").value.trim();
+  const vlan = document.getElementById("new-ep-vlan").value.trim();
+  const desc = document.getElementById("new-ep-desc").value.trim();
+
+  proposedEndpoints.push({
+    mac:         mac.replace(/:/g, ""),
+    mac_display: mac,
+    name,
+    label,
+    role,
+    vlan,
+    notes:       desc,
+    usage:       label.replace(/^dpc-/, ""),
+    matched_on:  "manual",
+    match_type:  "Manual",
+  });
+
+  renderEndpoints(proposedEndpoints);
+  updateApplyBar();
+  closeModal("endpoint");
+  document.getElementById("new-ep-mac").value   = "";
+  document.getElementById("new-ep-name").value  = "";
+  document.getElementById("new-ep-label").value = "";
+  document.getElementById("new-ep-role").value  = "";
+  document.getElementById("new-ep-vlan").value  = "";
+  document.getElementById("new-ep-desc").value  = "";
+}
+
+// ── Add tag ───────────────────────────────────────────────────────────────────
+function submitAddTag() {
+  const name = document.getElementById("new-tag-name").value.trim();
+  if (!name) { showModalError("tag", "Name is required."); return; }
+
+  const cfg = getCurrentTagCfg();
+  if (!cfg) { showModalError("tag", "Select a valid label type."); return; }
+
+  const tagRole = cfg.role || (cfg.apiType === "match" ? "classifier" : "result");
+  let values = [], extra = {};
+
+  switch (cfg.input) {
+    case "values": {
+      values = document.getElementById("new-tag-vals").value
+        .split(/[\n,]/).map(v => v.trim()).filter(Boolean);
+      if (!values.length) { showModalError("tag", "At least one value is required."); return; }
+      extra.match_all = document.getElementById("new-tag-matchall").checked;
+      break;
+    }
+    case "mdm": {
+      if (document.getElementById("tag-mdm-compliant").checked)    values.push("Compliant");
+      if (document.getElementById("tag-mdm-noncompliant").checked) values.push("NonCompliant");
+      if (document.getElementById("tag-mdm-unknown").checked)      values.push("Unknown");
+      if (!values.length) { showModalError("tag", "Select at least one status."); return; }
+      break;
+    }
+    case "vlan_id": {
+      const v = document.getElementById("new-tag-vlan").value.trim();
+      if (!v) { showModalError("tag", "VLAN ID is required."); return; }
+      extra.vlan = v;
+      break;
+    }
+    case "gbp_tag": {
+      const g = parseInt(document.getElementById("new-tag-gbp").value);
+      if (!g || g < 1 || g > 65535) { showModalError("tag", "GBP Tag must be 1–65535."); return; }
+      extra.gbp_tag = g;
+      break;
+    }
+    case "session_timeout": {
+      const t = parseInt(document.getElementById("new-tag-session-timeout").value);
+      if (!t || t < 1) { showModalError("tag", "Enter a positive timeout in seconds."); return; }
+      extra.session_timeout = t;
+      break;
+    }
+    case "username_attr": {
+      extra.username_attr = document.getElementById("new-tag-username-attr").value;
+      break;
+    }
+    case "egress_vlan": {
+      const ev = document.getElementById("new-tag-egress-vlans").value
+        .split(/[\n,]/).map(v => v.trim()).filter(Boolean);
+      if (!ev.length) { showModalError("tag", "At least one VLAN name is required."); return; }
+      extra.egress_vlan_names = ev;
+      break;
+    }
+    case "radius_attrs": {
+      const ra = document.getElementById("new-tag-radius-attrs").value
+        .split(/\n/).map(v => v.trim()).filter(Boolean);
+      if (!ra.length) { showModalError("tag", "At least one RADIUS attribute is required."); return; }
+      extra.radius_attrs = ra;
+      break;
+    }
+    case "vendor_attrs": {
+      const va = document.getElementById("new-tag-vendor-attrs").value
+        .split(/\n/).map(v => v.trim()).filter(Boolean);
+      if (!va.length) { showModalError("tag", "At least one vendor attribute is required."); return; }
+      extra.radius_vendor_attrs = va;
+      break;
+    }
+    case "portal": {
+      const p = document.getElementById("new-tag-portal-id").value.trim();
+      if (!p) { showModalError("tag", "Portal ID is required."); return; }
+      extra.redirect_nacportal_id = p;
+      break;
+    }
+  }
+
+  proposedTags.push({
+    name, tag_role: tagRole, type: cfg.apiType,
+    match: cfg.apiMatch || null, values, usage: "manual", note: "", ...extra,
+  });
+  renderTags(proposedTags);
+  updateApplyBar();
+  closeModal("tag");
+
+  // Reset
+  ["new-tag-name","new-tag-vals","new-tag-vlan","new-tag-gbp","new-tag-session-timeout",
+   "new-tag-egress-vlans","new-tag-radius-attrs","new-tag-vendor-attrs","new-tag-portal-id"]
+    .forEach(id => document.getElementById(id).value = "");
+  document.getElementById("new-tag-matchall").checked      = false;
+  document.getElementById("tag-mdm-compliant").checked     = true;
+  document.getElementById("tag-mdm-noncompliant").checked  = false;
+  document.getElementById("tag-mdm-unknown").checked       = false;
+  document.getElementById("new-tag-label-type").value      = "aaa";
+  onTagLabelTypeChange();
+}
+
+// ── Add rule ──────────────────────────────────────────────────────────────────
+function submitAddRule() {
+  const name = document.getElementById("new-rule-name").value.trim();
+  if (!name) { showModalError("rule", "Name is required."); return; }
+
+  const classifierTags = [...document.querySelectorAll('input[name="rule-clf-tag"]:checked')].map(el => el.value);
+  const resultTags     = [...document.querySelectorAll('input[name="rule-res-tag"]:checked')].map(el => el.value);
+  const action         = document.getElementById("new-rule-action").value;
+  const authType       = document.getElementById("new-rule-auth-type").value;
+  const portWired      = document.getElementById("rule-port-wired").checked;
+  const portWireless   = document.getElementById("rule-port-wireless").checked;
+  const portTypes      = [...(portWired ? ["wired"] : []), ...(portWireless ? ["wireless"] : [])];
+
+  const matching = { all_tags: document.getElementById("new-rule-all-tags").checked };
+  if (classifierTags.length) matching.nactags  = classifierTags;
+  if (authType)              matching.auth_type = authType;
+  if (portTypes.length)      matching.port_types = portTypes;
+
+  proposedRules.push({
+    name,
+    order:           parseInt(document.getElementById("new-rule-order").value) || proposedRules.length + 1,
+    action,
+    enabled:         document.getElementById("new-rule-enabled").checked,
+    classifier_tags: classifierTags,
+    result_tags:     resultTags,
+    matching,
+    label:           "",
+  });
+
+  renderRules(proposedRules);
+  updateApplyBar();
+  closeModal("rule");
+  // Reset
+  document.getElementById("new-rule-name").value        = "";
+  document.getElementById("new-rule-order").value       = "";
+  document.getElementById("new-rule-action").value      = "allow";
+  document.getElementById("new-rule-enabled").checked   = true;
+  document.getElementById("new-rule-all-tags").checked  = false;
+  document.getElementById("new-rule-auth-type").value   = "";
+  document.getElementById("rule-port-wired").checked    = false;
+  document.getElementById("rule-port-wireless").checked = false;
+}
+
+// ── Load scan ─────────────────────────────────────────────────────────────────
+async function load() {
+  try {
+    const res  = await fetch(`/api/scan/${ORG_ID}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    proposedTags      = data.proposed_tags      || [];
+    proposedRules     = data.proposed_rules     || [];
+    proposedEndpoints = data.proposed_endpoints || [];
+
+    renderSources(data.sources || []);
+    renderEndpoints(proposedEndpoints);
+    renderTags(proposedTags);
+    renderRules(proposedRules);
+
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("content").style.display = "block";
+
+    updateApplyBar();
+    if (proposedTags.length || proposedRules.length || proposedEndpoints.length) {
+      document.getElementById("step2").classList.add("active");
+    }
+
+    // Populate label datalist for endpoint modal
+    const dl = document.getElementById("existing-labels");
+    const labelSet = new Set(proposedTags.filter(t => t.match === "usermac_label")
+      .flatMap(t => t.values));
+    proposedEndpoints.forEach(ep => labelSet.add(ep.label));
+    dl.innerHTML = [...labelSet].map(l => `<option value="${l}">`).join("");
+
+  } catch (err) {
+    document.getElementById("loading").style.display = "none";
+    const eb = document.getElementById("error-banner");
+    eb.style.display = "block";
+    eb.textContent   = `Error scanning org: ${err.message}`;
+  }
+}
+
+// ── Render sources ────────────────────────────────────────────────────────────
+function renderSources(sources) {
+  const grid  = document.getElementById("source-grid");
+  const total = sources.reduce((n, s) => n + s.rules.length, 0);
+  document.getElementById("src-count").textContent = total;
+
+  if (!sources.length || !total) {
+    grid.innerHTML = `<div class="no-dpc">No Dynamic Port Config rules found in any network template.</div>`;
+    return;
+  }
+
+  grid.innerHTML = sources.map((src, si) => {
+    const rows = src.rules.map(r => {
+      const vals = r.values.map(v => `<span class="tag-chip">${v}</span>`).join(" ");
+      return `<tr>
+        <td>${r.type === "MAC OUI"
+          ? '<span class="match-type match-mac">MAC OUI</span>'
+          : '<span class="match-type match-lldp">LLDP Name</span>'}</td>
+        <td>${vals}</td>
+        <td><span class="usage-chip">${r.usage}</span></td>
+        <td style="color:var(--muted);font-size:12px">${src.vlan_map[r.usage] ? `VLAN ${src.vlan_map[r.usage]}` : "—"}</td>
+      </tr>`;
+    }).join("");
+
+    return `
+    <div class="source-card">
+      <div class="source-head" onclick="toggleCard(${si})">
+        <div>
+          <div class="source-name">${src.template_name}</div>
+          <div class="source-meta">${src.rules.length} rule${src.rules.length !== 1 ? "s" : ""} &nbsp;·&nbsp; <span style="font-family:monospace;font-size:11px">${src.template_id}</span></div>
+        </div>
+        <span class="chevron open" id="chev-${si}">&#9658;</span>
+      </div>
+      <div class="source-body open" id="body-${si}">
+        <table class="rule-table">
+          <thead><tr><th>Type</th><th>Match Values</th><th>→ Usage</th><th>VLAN</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function toggleCard(i) {
+  document.getElementById(`body-${i}`).classList.toggle("open");
+  document.getElementById(`chev-${i}`).classList.toggle("open");
+}
+
+// ── Render endpoints ──────────────────────────────────────────────────────────
+function renderEndpoints(endpoints) {
+  const section = document.getElementById("section-endpoints");
+  section.style.display = "block";
+  document.getElementById("ep-count").textContent = endpoints.length;
+
+  const tbody = document.getElementById("endpoints-tbody");
+  if (!endpoints.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No endpoints — add one manually or check that wired clients are active.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = endpoints.map((ep, i) => {
+    const mtCls = ep.match_type === "LLDP" ? "match-lldp" : ep.match_type === "Manual" ? "match-manual" : "match-mac";
+    return `<tr>
+      <td style="font-family:monospace;font-size:12px">${ep.mac_display}</td>
+      <td><input class="edit-input" id="ep-name-${i}" value="${escHtml(ep.name)}" style="font-size:12px"></td>
+      <td>
+        <span class="tag-chip">${ep.matched_on || ""}</span>
+        <span class="match-type ${mtCls}" style="margin-left:4px">${ep.match_type || ""}</span>
+      </td>
+      <td><span class="usage-chip">${ep.label}</span></td>
+      <td style="color:var(--muted);font-size:12px">${ep.usage}</td>
+      <td><button class="btn-delete" onclick="deleteItem('endpoint',${i})" title="Remove">&#215;</button></td>
+    </tr>`;
+  }).join("");
+}
+
+// ── Render tags ───────────────────────────────────────────────────────────────
+function tagRoleStyle(role) {
+  if (role === "result")     return { cls: "match-lldp", label: "RESULT" };
+  if (role === "classifier") return { cls: "match-mac",  label: "CLASSIFIER" };
+  return { cls: "", label: role };
+}
+function matchLabel(match) {
+  const map = {
+    usermac_label:       "client label",     hostname:            "hostname",
+    client_mac:          "client MAC",       radius_group:        "role",
+    user_name:           "user name",        realm:               "realm",
+    cert_cn:             "cert CN",          cert_san:            "cert SAN",
+    cert_serial:         "cert serial",      cert_issuer:         "cert issuer",
+    cert_sub:            "cert subject",     cert_eku:            "cert EKU",
+    cert_template:       "cert template",    mdm_status:          "MDM compliance",
+    idp_role:            "directory",        ssid:                "SSID",
+    ingress_vlan:        "ingress VLAN",     nas_ip:              "NAS IP",
+    lldp_system_name:    "LLDP name",
+    // result types (used when match is null and type is passed)
+    vlan:                "VLAN",             gbp_tag:             "GBP tag",
+    session_timeout:     "session timeout",  username_attr:       "returned username",
+    egress_vlan_names:   "egress VLAN",      radius_attrs:        "RADIUS attrs",
+    radius_vendor_attrs: "vendor attrs",     redirect_nacportal_id: "portal redirect",
+  };
+  return map[match] || match || "—";
+}
+
+function renderTags(tags) {
+  const section = document.getElementById("section-tags");
+  section.style.display = "block";
+  document.getElementById("tag-count").textContent = tags.length;
+
+  const tbody = document.getElementById("tags-tbody");
+  if (!tags.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No tags — add one manually.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = tags.map((t, i) => {
+    const role   = tagRoleStyle(t.tag_role);
+    const valStr = t.type === "vlan"               ? (t.vlan || "")
+                 : t.type === "gbp_tag"            ? String(t.gbp_tag ?? "")
+                 : t.type === "session_timeout"    ? `${t.session_timeout ?? ""} sec`
+                 : t.type === "username_attr"      ? (t.username_attr || "")
+                 : t.type === "egress_vlan_names"  ? (t.egress_vlan_names || []).join(", ")
+                 : t.type === "radius_attrs"       ? (t.radius_attrs || []).join(", ")
+                 : t.type === "radius_vendor_attrs"? (t.radius_vendor_attrs || []).join(", ")
+                 : t.type === "redirect_nacportal_id" ? (t.redirect_nacportal_id || "")
+                 : (t.values || []).join(", ");
+    const noteHtml = t.note
+      ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">&#9432; ${t.note}</div>` : "";
+    return `<tr>
+      <td>
+        <input class="edit-input" id="tag-name-${i}" value="${escHtml(t.name)}" style="font-family:monospace;font-size:12px">
+        ${noteHtml}
+      </td>
+      <td><span class="match-type ${role.cls}">${role.label}</span></td>
+      <td style="color:var(--muted);font-size:12px">${matchLabel(t.match || t.type)}</td>
+      <td><input class="edit-input values-edit" id="tag-vals-${i}" value="${escHtml(valStr)}" title="${t.type === 'vlan' ? 'VLAN ID' : 'Comma-separated values'}"></td>
+      <td><span class="usage-chip">${t.usage}</span></td>
+      <td><button class="btn-delete" onclick="deleteItem('tag',${i})" title="Remove">&#215;</button></td>
+    </tr>`;
+  }).join("");
+}
+
+// ── Render rules ──────────────────────────────────────────────────────────────
+function renderRules(rules) {
+  const section = document.getElementById("section-rules");
+  section.style.display = "block";
+  document.getElementById("rule-count").textContent = rules.length;
+
+  const tbody = document.getElementById("rules-tbody");
+  if (!rules.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;font-size:13px">No rules — add one manually.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rules.map((r, i) => {
+    const classifierPills = (r.classifier_tags || []).map(n => `<span class="tag-chip">${escHtml(n)}</span>`).join(" ");
+    const resultPills     = (r.result_tags     || []).map(n => `<span class="tag-chip" style="background:rgba(34,197,94,0.1);color:#86efac">${escHtml(n)}</span>`).join(" ");
+    const labelNote = r.label
+      ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">&#9432; label: <code style="color:#a78bfa">${escHtml(r.label)}</code></div>` : "";
+    const authNote = r.matching?.auth_type
+      ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">auth: ${escHtml(r.matching.auth_type)}</div>` : "";
+    const actionColor = r.action === "block" ? "var(--red)" : "var(--green)";
+    const enabledDot  = r.enabled === false
+      ? `<span style="font-size:10px;color:var(--muted);margin-left:4px">(disabled)</span>` : "";
+    return `<tr>
+      <td style="color:var(--muted)">${r.order}</td>
+      <td>
+        <input class="edit-input" id="rule-name-${i}" value="${escHtml(r.name)}" style="font-family:monospace;font-size:12px">
+        ${labelNote}${authNote}
+      </td>
+      <td>${classifierPills || '<span class="no-vlan">none</span>'}</td>
+      <td>${resultPills     || '<span class="no-vlan">none</span>'}</td>
+      <td><span style="color:${actionColor};font-size:12px;font-weight:600">${r.action || "allow"}</span>${enabledDot}</td>
+      <td><button class="btn-delete" onclick="deleteItem('rule',${i})" title="Remove">&#215;</button></td>
+    </tr>`;
+  }).join("");
+}
+
+// ── Delete items ──────────────────────────────────────────────────────────────
+function deleteItem(type, i) {
+  if (type === "endpoint") {
+    proposedEndpoints.splice(i, 1);
+    renderEndpoints(proposedEndpoints);
+  } else if (type === "tag") {
+    proposedTags.splice(i, 1);
+    renderTags(proposedTags);
+  } else if (type === "rule") {
+    proposedRules.splice(i, 1);
+    renderRules(proposedRules);
+  }
+  updateApplyBar();
+}
+
+// ── Apply bar ─────────────────────────────────────────────────────────────────
+function updateApplyBar() {
+  const total = proposedEndpoints.length + proposedTags.length + proposedRules.length;
+  const bar = document.getElementById("apply-bar");
+  if (total > 0) {
+    bar.classList.add("visible");
+  }
+  document.getElementById("bar-ep-count").textContent   = proposedEndpoints.length;
+  document.getElementById("bar-tag-count").textContent  = proposedTags.length;
+  document.getElementById("bar-rule-count").textContent = proposedRules.length;
+}
+
+// ── Apply ─────────────────────────────────────────────────────────────────────
+async function applyAll() {
+  const btn = document.getElementById("apply-btn");
+  btn.disabled    = true;
+  btn.textContent = "Creating…";
+
+  const nameMap = {};
+  proposedTags.forEach((t, i) => {
+    nameMap[t.name] = document.getElementById(`tag-name-${i}`).value.trim();
+  });
+
+  const tags = proposedTags.map((t, i) => ({
+    ...t,
+    name:   document.getElementById(`tag-name-${i}`).value.trim(),
+    values: t.type === "vlan"
+      ? []
+      : document.getElementById(`tag-vals-${i}`).value.split(",").map(v => v.trim()).filter(Boolean),
+    vlan: t.type === "vlan"
+      ? document.getElementById(`tag-vals-${i}`).value.trim()
+      : (t.vlan || ""),
+  }));
+
+  const endpoints = proposedEndpoints.map((ep, i) => ({
+    ...ep,
+    name: document.getElementById(`ep-name-${i}`).value.trim(),
+  }));
+
+  const rules = proposedRules.map((r, i) => ({
+    name:            document.getElementById(`rule-name-${i}`).value.trim(),
+    order:           r.order,
+    action:          "allow",
+    classifier_tags: (r.classifier_tags || []).map(n => nameMap[n] || n),
+    result_tags:     (r.result_tags     || []).map(n => nameMap[n] || n),
+    label:           r.label,
+  }));
+
+  try {
+    const res  = await fetch(`/api/apply/${ORG_ID}`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({tags, rules, endpoints}),
+    });
+    const data = await res.json();
+
+    document.getElementById("apply-bar").classList.remove("visible");
+    document.getElementById("step3").classList.add("active");
+    document.getElementById("result-panel").style.display = "block";
+
+    document.getElementById("result-endpoints").innerHTML =
+      (data.endpoints || []).map(ep => `
+        <div class="result-row">
+          <span class="result-name">${ep.mac}</span>
+          <span class="usage-chip" style="font-size:11px">${ep.label || ""}</span>
+          <span class="status-${ep.status}">${ep.status.toUpperCase()}</span>
+          ${ep.id ? `<span class="result-id">${ep.id}</span>`
+                  : `<span style="color:var(--red);font-size:12px">${ep.error || ""}</span>`}
+        </div>`).join("") ||
+      `<div class="result-row" style="color:var(--muted)">No endpoints created.</div>`;
+
+    document.getElementById("result-tags").innerHTML =
+      (data.tags || []).map(t => `
+        <div class="result-row">
+          <span class="result-name">${t.name}</span>
+          <span class="status-${t.status}">${t.status.toUpperCase()}</span>
+          ${t.id ? `<span class="result-id">${t.id}</span>`
+                 : `<span style="color:var(--red);font-size:12px">${t.error || ""}</span>`}
+        </div>`).join("") ||
+      `<div class="result-row" style="color:var(--muted)">No tags created.</div>`;
+
+    document.getElementById("result-rules").innerHTML =
+      (data.rules || []).map(r => `
+        <div class="result-row">
+          <span class="result-name">${r.name}</span>
+          <span class="status-${r.status}">${r.status.toUpperCase()}</span>
+          ${r.id ? `<span class="result-id">${r.id}</span>`
+                 : `<span style="color:var(--red);font-size:12px">${r.error || ""}</span>`}
+        </div>`).join("") ||
+      `<div class="result-row" style="color:var(--muted)">No rules created.</div>`;
+
+    document.getElementById("result-panel").scrollIntoView({behavior: "smooth"});
+  } catch (err) {
+    btn.disabled    = false;
+    btn.textContent = "Retry";
+    const eb = document.getElementById("error-banner");
+    eb.style.display = "block";
+    eb.textContent   = `Apply failed: ${err.message}`;
+  }
+}
+
+function escHtml(s) {
+  return String(s || "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+onTagLabelTypeChange();
+load();
+</script>
+</body>
+</html>

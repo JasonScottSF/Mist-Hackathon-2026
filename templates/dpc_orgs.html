@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DPC → NAC — Select Org</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117; color: #e8eaf0; min-height: 100vh;
+    }
+    header {
+      background: #1a1d27; border-bottom: 1px solid #2a2d3a;
+      padding: 0 28px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      border-radius: 8px; display: flex; align-items: center;
+      justify-content: center; font-size: 15px; color: #fff;
+    }
+    .user-area { display: flex; align-items: center; gap: 14px; }
+    .user-name { font-size: 13px; color: #6b7280; }
+    .logout-btn {
+      font-size: 13px; padding: 6px 14px; border-radius: 6px;
+      border: 1px solid #2a2d3a; background: transparent; color: #6b7280; cursor: pointer;
+    }
+    .logout-btn:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,0.08); }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 24px; }
+    .page-title { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+    .page-sub { font-size: 14px; color: #6b7280; margin-bottom: 36px; }
+    .org-grid { display: flex; flex-direction: column; gap: 12px; }
+    .org-card {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 10px;
+      padding: 18px 22px; text-decoration: none; color: inherit;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .org-card:hover { border-color: #7c3aed; background: #1e1a30; }
+    .org-left { display: flex; align-items: center; gap: 14px; }
+    .org-avatar {
+      width: 38px; height: 38px; border-radius: 8px;
+      background: linear-gradient(135deg, #7c3aed22, #4f46e522);
+      border: 1px solid #7c3aed44;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; color: #a78bfa;
+    }
+    .org-name { font-size: 15px; font-weight: 600; }
+    .org-id { font-size: 12px; color: #6b7280; margin-top: 2px; font-family: monospace; }
+    .org-arrow { color: #6b7280; font-size: 18px; }
+    .empty { text-align: center; color: #6b7280; padding: 60px 0; font-size: 14px; }
+
+    .lock-box {
+      background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 10px;
+      padding: 20px 22px; margin-bottom: 28px;
+    }
+    .lock-box.active { border-color: #7c3aed; background: #1e1a30; }
+    .lock-label {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: #6b7280; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .lock-indicator {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #6b7280; display: inline-block;
+    }
+    .lock-indicator.on { background: #7c3aed; box-shadow: 0 0 6px #7c3aed88; }
+    .lock-row { display: flex; gap: 10px; align-items: center; }
+    .lock-input {
+      flex: 1; padding: 9px 14px; background: #0f1117;
+      border: 1px solid #2a2d3a; border-radius: 8px; color: #e8eaf0;
+      font-size: 13px; font-family: monospace; outline: none;
+    }
+    .lock-input:focus { border-color: #7c3aed; }
+    .btn-lock {
+      padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap;
+    }
+    .btn-lock:hover { opacity: 0.88; }
+    .btn-clear {
+      padding: 9px 14px; border-radius: 8px; cursor: pointer;
+      background: transparent; border: 1px solid #2a2d3a;
+      color: #6b7280; font-size: 13px;
+    }
+    .btn-clear:hover { border-color: #ef4444; color: #ef4444; }
+    .lock-status { font-size: 12px; margin-top: 10px; }
+    .lock-status.locked { color: #a78bfa; }
+    .lock-status.unlocked { color: #6b7280; }
+    .error-msg {
+      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px; color: #f87171; font-size: 13px;
+      padding: 10px 14px; margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <div class="logo-icon">&#8644;</div>
+      DPC → NAC Converter
+    </div>
+    <div class="user-area">
+      <span class="user-name">{{ user_name }}</span>
+      <a href="/logout"><button class="logout-btn">Sign out</button></a>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-title">Select an organization</div>
+    <div class="page-sub">Choose the org whose Dynamic Port Config rules you want to convert to Access Assurance policies.</div>
+
+    <!-- Org lock -->
+    <div class="lock-box {% if locked_org_id %}active{% endif %}">
+      <div class="lock-label">
+        <span class="lock-indicator {% if locked_org_id %}on{% endif %}"></span>
+        Org Lock
+      </div>
+      <form method="POST" action="/orgs">
+        <div class="lock-row">
+          <input class="lock-input" type="text" name="locked_org_id"
+                 placeholder="Paste an org UUID to restrict all actions to that org…"
+                 value="{{ locked_org_id }}">
+          <button class="btn-lock" type="submit">&#128274; Lock</button>
+          {% if locked_org_id %}
+          <button class="btn-clear" type="submit" name="locked_org_id" value="">Clear</button>
+          {% endif %}
+        </div>
+      </form>
+      {% if error %}
+        <div class="error-msg">{{ error }}</div>
+      {% elif locked_org_id %}
+        <div class="lock-status locked">&#128274; Locked to org <code>{{ locked_org_id }}</code> — scan and apply are restricted to this org only.</div>
+      {% else %}
+        <div class="lock-status unlocked">&#128275; Unlocked — all orgs visible. Set a lock to restrict changes to one org.</div>
+      {% endif %}
+    </div>
+
+    <div class="org-grid">
+      {% if orgs %}
+        {% for org in orgs %}
+        <a class="org-card" href="/scan/{{ org.org_id }}">
+          <div class="org-left">
+            <div class="org-avatar">{{ org.name[0].upper() }}</div>
+            <div>
+              <div class="org-name">{{ org.name }}</div>
+              <div class="org-id">{{ org.org_id }}</div>
+            </div>
+          </div>
+          <span class="org-arrow">&#8250;</span>
+        </a>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No organizations found for this account.</div>
+      {% endif %}
+    </div>
+  </main>
+</body>
+</html>
