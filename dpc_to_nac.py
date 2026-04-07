@@ -48,13 +48,18 @@ _UUID_RE = re.compile(
 )
 
 MIST_CLOUDS = {
-    "api.mist.com":     "Global 01 (US East)",
+    "api.mist.com":     "Global 01 (US West)",
     "api.gc1.mist.com": "Global 02 (US West)",
-    "api.ac2.mist.com": "Global 03 (US West)",
-    "api.ac5.mist.com": "Global 04 (US West)",
-    "api.eu.mist.com":  "Europe 01 (Ireland)",
-    "api.gc2.mist.com": "Europe 02 (Germany)",
-    "api.ac6.mist.com": "APAC 01 (Singapore)",
+    "api.ac2.mist.com": "Global 03 (US East)",
+    "api.gc2.mist.com": "Global 04 (Canada)",
+    "api.gc4.mist.com": "Global 05 (Americas)",
+    "api.eu.mist.com":  "EMEA 01 (Frankfurt)",
+    "api.gc3.mist.com": "EMEA 02 (UK)",
+    "api.ac6.mist.com": "EMEA 03 (UAE)",
+    "api.gc6.mist.com": "EMEA 04 (Saudi Arabia)",
+    "api.ac5.mist.com": "APAC 01 (Sydney)",
+    "api.gc5.mist.com": "APAC 02 (India)",
+    "api.gc7.mist.com": "APAC 03 (Japan)",
 }
 
 _sessions = {}  # sid → {requests_session, cloud_host, email, user_name, authenticated, created_at}
