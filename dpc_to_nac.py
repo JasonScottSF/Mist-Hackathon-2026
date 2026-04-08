@@ -111,6 +111,15 @@ def mist_put(sid, path, body):
     return rs.put(mist_url(host, path), json=body, headers=headers, timeout=20)
 
 
+def mist_patch(sid, path, body):
+    store = _sessions[sid]
+    rs    = store["requests_session"]
+    host  = store["cloud_host"]
+    csrf  = next((v for k, v in rs.cookies.items() if k.startswith("csrftoken")), None)
+    headers = {"X-CSRFToken": csrf} if csrf else {}
+    return rs.patch(mist_url(host, path), json=body, headers=headers, timeout=20)
+
+
 def authed(sid):
     return bool(sid and sid in _sessions and _sessions[sid].get("authenticated"))
 
@@ -1381,6 +1390,17 @@ BP_FILTERS = [
         ),
     },
     {
+        "field":      "no_legacy",
+        "label":      "High Density Data Rates",
+        "standalone": True,
+        "tooltip": (
+            "Disables 802.11b (1/2/5.5/11 Mbps) legacy data rates on 2.4 GHz. "
+            "Removing these rates eliminates the slowest transmissions that consume "
+            "the most airtime, improving overall throughput and reducing the DIFS/SIFS "
+            "overhead for all clients on the SSID."
+        ),
+    },
+    {
         "field":      "block_blacklisted_clients",
         "label":      "Prevent Banned Clients",
         "standalone": True,
@@ -1431,6 +1451,7 @@ def api_bestpractices(org_id):
                 "arp_filter":                bool(w.get("arp_filter", False)),
                 "limit_bcast":               bool(w.get("limit_bcast", False)),
                 "limit_probe_response":      bool(w.get("limit_probe_response", False)),
+                "no_legacy":                 bool(w.get("no_legacy", False)),
                 "block_blacklisted_clients": bool(w.get("block_blacklisted_clients", False)),
                 "scope":                     scope,
                 "scope_id":                  scope_id,
@@ -1475,39 +1496,111 @@ def api_bestpractices(org_id):
 
         result.sort(key=lambda w: (w["site_name"].lower(), w["ssid"].lower()))
 
-        # 3. DPC check — scan network templates for dynamic port rules
-        dpc_templates = []
-        def _check_dpc_template(tmpl):
+        # 3. Network template checks — DPC rules + DNS/NTP (single fetch per template)
+        def _check_template(tmpl):
             tmpl_id = tmpl.get("id")
             if not tmpl_id:
                 return None
             try:
-                detail = mist_get(sid, f"/orgs/{org_id}/networktemplates/{tmpl_id}")
-                rules  = detail.get("port_usages", {}).get("dynamic", {}).get("rules", [])
-                if rules:
-                    return {"name": tmpl.get("name", tmpl_id), "rule_count": len(rules)}
+                detail      = mist_get(sid, f"/orgs/{org_id}/networktemplates/{tmpl_id}")
+                rules       = detail.get("port_usages", {}).get("dynamic", {}).get("rules", [])
+                ntp_servers = detail.get("ntp_servers") or []
+                dns_servers = detail.get("dns_servers") or []
+                return {
+                    "id":          tmpl_id,
+                    "name":        detail.get("name", tmpl.get("name", tmpl_id)),
+                    "dpc_rules":   len(rules),
+                    "has_dpc":     len(rules) > 0,
+                    "ntp_servers": ntp_servers,
+                    "dns_servers": dns_servers,
+                    "has_ntp":     len(ntp_servers) > 0,
+                    "has_dns":     len(dns_servers) > 0,
+                }
             except Exception:
-                pass
-            return None
+                return None
 
+        tmpl_details  = []
+        dpc_info      = {"has_rules": False, "template_count": 0, "rule_count": 0, "templates": []}
+        dns_ntp_info  = {"total": 0, "ntp_count": 0, "dns_count": 0, "templates": []}
         try:
             raw_tmpls = mist_get(sid, f"/orgs/{org_id}/networktemplates")
             tmpls     = raw_tmpls if isinstance(raw_tmpls, list) else raw_tmpls.get("results", [])
             with ThreadPoolExecutor(max_workers=8) as pool:
-                dpc_futures = {pool.submit(_check_dpc_template, t): t for t in tmpls}
-                for fut in as_completed(dpc_futures):
+                futures = {pool.submit(_check_template, t): t for t in tmpls}
+                for fut in as_completed(futures):
                     res = fut.result()
                     if res:
-                        dpc_templates.append(res)
-        except Exception as e:
-            _log.warning("DPC check failed: %s", e)
+                        tmpl_details.append(res)
+            tmpl_details.sort(key=lambda t: t["name"].lower())
 
-        dpc_info = {
-            "has_rules":      len(dpc_templates) > 0,
-            "template_count": len(dpc_templates),
-            "rule_count":     sum(t["rule_count"] for t in dpc_templates),
-            "templates":      sorted(dpc_templates, key=lambda t: t["name"].lower()),
-        }
+            dpc_with_rules = [t for t in tmpl_details if t["has_dpc"]]
+            dpc_info = {
+                "has_rules":      len(dpc_with_rules) > 0,
+                "template_count": len(dpc_with_rules),
+                "rule_count":     sum(t["dpc_rules"] for t in dpc_with_rules),
+                "templates":      [{"name": t["name"], "rule_count": t["dpc_rules"]}
+                                   for t in dpc_with_rules],
+            }
+
+            dns_ntp_info = {
+                "total":     len(tmpl_details),
+                "ntp_count": sum(1 for t in tmpl_details if t["has_ntp"]),
+                "dns_count": sum(1 for t in tmpl_details if t["has_dns"]),
+                "templates": [{"name":        t["name"],
+                               "has_ntp":     t["has_ntp"],
+                               "ntp_servers": t["ntp_servers"],
+                               "has_dns":     t["has_dns"],
+                               "dns_servers": t["dns_servers"]}
+                              for t in tmpl_details],
+            }
+        except Exception as e:
+            _log.warning("Network template check failed: %s", e)
+            dns_ntp_info = {"total": 0, "ntp_count": 0, "dns_count": 0,
+                            "templates": [], "error": str(e)}
+
+        # 3b. WAN (gateway) template DNS/NTP check
+        wan_dns_ntp_info = {}
+        try:
+            raw_wan = mist_get(sid, f"/orgs/{org_id}/gatewaytemplates")
+            wan_tmpls = raw_wan if isinstance(raw_wan, list) else raw_wan.get("results", [])
+
+            def _check_wan_template(tmpl):
+                tmpl_id = tmpl.get("id")
+                if not tmpl_id:
+                    return None
+                try:
+                    detail      = mist_get(sid, f"/orgs/{org_id}/gatewaytemplates/{tmpl_id}")
+                    ntp_servers = detail.get("ntp_servers") or []
+                    dns_servers = detail.get("dns_servers") or []
+                    return {
+                        "name":        detail.get("name", tmpl.get("name", tmpl_id)),
+                        "ntp_servers": ntp_servers,
+                        "dns_servers": dns_servers,
+                        "has_ntp":     len(ntp_servers) > 0,
+                        "has_dns":     len(dns_servers) > 0,
+                    }
+                except Exception:
+                    return None
+
+            wan_details = []
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                futures = {pool.submit(_check_wan_template, t): t for t in wan_tmpls}
+                for fut in as_completed(futures):
+                    res = fut.result()
+                    if res:
+                        wan_details.append(res)
+            wan_details.sort(key=lambda t: t["name"].lower())
+
+            wan_dns_ntp_info = {
+                "total":     len(wan_details),
+                "ntp_count": sum(1 for t in wan_details if t["has_ntp"]),
+                "dns_count": sum(1 for t in wan_details if t["has_dns"]),
+                "templates": wan_details,
+            }
+        except Exception as e:
+            _log.warning("WAN template DNS/NTP check failed: %s", e)
+            wan_dns_ntp_info = {"total": 0, "ntp_count": 0, "dns_count": 0,
+                                "templates": [], "error": str(e)}
 
         # 4. Subscriptions / License check + Access Assurance — fetch in parallel
         WARN_DAYS = 90
@@ -1625,12 +1718,14 @@ def api_bestpractices(org_id):
             rf_info = {"exists": False, "error": str(e)}
 
         return jsonify({
-            "wlans":    result,
-            "filters":  BP_FILTERS,
-            "dpc":      dpc_info,
-            "licenses": licenses_info,
-            "aa":       aa_info,
-            "rf":       rf_info,
+            "wlans":        result,
+            "filters":      BP_FILTERS,
+            "dpc":          dpc_info,
+            "dns_ntp":      dns_ntp_info,
+            "wan_dns_ntp":  wan_dns_ntp_info,
+            "licenses":     licenses_info,
+            "aa":           aa_info,
+            "rf":           rf_info,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1678,9 +1773,154 @@ def api_bestpractices_apply(org_id, wlan_id):
         _log.info("BESTPRACTICE scope=%s scope_id=%s wlan=%s ssid=%s field=%s actor=%s ip=%s",
                   scope, scope_id, wlan_id, wlan.get("ssid", ""), field, actor, request.remote_addr)
 
-        r = mist_put(sid, put_path, {field: True})
+        wlan[field] = True
+        r = mist_put(sid, put_path, wlan)
         if r.ok:
             return jsonify({"status": "applied", "field": field})
+        try:
+            detail = r.json().get("detail", r.text[:300])
+        except Exception:
+            detail = r.text[:300]
+        return jsonify({"status": "error", "detail": detail}), r.status_code
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/datarates/<org_id>")
+def api_datarates(org_id):
+    """Return per-WLAN data rate settings by fetching full WLAN objects."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    # Collect (wlan_id, scope, scope_id, site_name) tuples from the list endpoints
+    stubs = []
+    try:
+        for w in (mist_get(sid, f"/orgs/{org_id}/wlans") or []):
+            if w.get("id"):
+                stubs.append((w["id"], "org", org_id, ""))
+    except Exception as e:
+        _log.warning("org wlan list failed: %s", e)
+
+    try:
+        sites = mist_get(sid, f"/orgs/{org_id}/sites") or []
+    except Exception:
+        sites = []
+
+    def _site_stubs(site):
+        try:
+            wlans = mist_get(sid, f"/sites/{site['id']}/wlans") or []
+            return [(w["id"], "site", site["id"], site.get("name", ""))
+                    for w in wlans if w.get("id")]
+        except Exception:
+            return []
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for result in as_completed([ex.submit(_site_stubs, s) for s in sites]):
+            stubs.extend(result.result())
+
+    # Fetch each WLAN individually to get full rateset
+    def _fetch_wlan(stub):
+        wlan_id, scope, scope_id, site_name = stub
+        try:
+            if scope == "site":
+                w = mist_get(sid, f"/sites/{scope_id}/wlans/{wlan_id}")
+            else:
+                w = mist_get(sid, f"/orgs/{org_id}/wlans/{wlan_id}")
+            rateset = w.get("rateset", {})
+            # Get the template for each active band
+            band_24 = rateset.get("24", {}).get("template", "compatible")
+            band_5  = rateset.get("5",  {}).get("template", "compatible")
+            band_6  = rateset.get("6",  {}).get("template", "compatible")
+            bands   = w.get("bands", [])
+            return {
+                "id":        wlan_id,
+                "ssid":      w.get("ssid", "Unnamed"),
+                "enabled":   w.get("enabled", True),
+                "scope":     scope,
+                "scope_id":  scope_id,
+                "site_name": site_name,
+                "band_24":   band_24,
+                "band_5":    band_5,
+                "band_6":    band_6,
+                "bands":     bands,
+                # high density = no legacy on every active band
+                "high_density": all(
+                    rateset.get(b, {}).get("template", "compatible") == "high-density"
+                    for b in bands if b in rateset
+                ) and bool(rateset),
+            }
+        except Exception as e:
+            _log.warning("wlan detail fetch failed %s: %s", wlan_id, e)
+            return None
+
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        futures = [ex.submit(_fetch_wlan, s) for s in stubs]
+        wlans = [r.result() for r in as_completed(futures) if r.result()]
+
+    seen = set()
+    unique = []
+    for w in wlans:
+        if w["id"] not in seen:
+            seen.add(w["id"])
+            unique.append(w)
+
+    return jsonify({"wlans": unique})
+
+
+@app.route("/api/datarates/<org_id>/<wlan_id>", methods=["POST"])
+def api_datarates_apply(org_id, wlan_id):
+    """Set a WLAN's data rates to high-density on all active bands."""
+    if not valid_uuid(org_id) or not valid_uuid(wlan_id):
+        return jsonify({"error": "Invalid ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    data     = request.json or {}
+    scope    = data.get("scope", "org")
+    scope_id = data.get("scope_id", org_id)
+
+    if scope not in ("org", "site"):
+        return jsonify({"error": "Invalid scope"}), 400
+    if scope == "site" and not valid_uuid(scope_id):
+        return jsonify({"error": "Invalid scope_id"}), 400
+
+    if scope == "site":
+        path = f"/sites/{scope_id}/wlans/{wlan_id}"
+    else:
+        path = f"/orgs/{org_id}/wlans/{wlan_id}"
+
+    try:
+        wlan   = mist_get(sid, path)
+        bands  = wlan.get("bands", ["24", "5"])
+        rateset = wlan.get("rateset", {})
+
+        # Build updated rateset — set high-density on all active bands
+        new_rateset = dict(rateset)
+        for b in bands:
+            band_cfg = dict(new_rateset.get(b, {}))
+            band_cfg["template"] = "high-density"
+            new_rateset[b] = band_cfg
+
+        # Merge into full WLAN object for PUT (Mist doesn't support PATCH on WLANs)
+        wlan["rateset"] = new_rateset
+
+        actor = _sessions[sid].get("email", "unknown")
+        _log.info("DATARATES scope=%s scope_id=%s wlan=%s ssid=%s new_rateset=%s actor=%s ip=%s",
+                  scope, scope_id, wlan_id, wlan.get("ssid", ""), new_rateset, actor, request.remote_addr)
+
+        r = mist_put(sid, path, wlan)
+        _log.info("DATARATES PUT status=%s body=%s", r.status_code, r.text[:500])
+        if r.ok:
+            return jsonify({"status": "applied"})
         try:
             detail = r.json().get("detail", r.text[:300])
         except Exception:

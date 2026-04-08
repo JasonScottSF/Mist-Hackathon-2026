@@ -717,6 +717,161 @@ function buildWlanSub() {
   return sub;
 }
 
+// ── Build Data Rates sub-card ─────────────────────────────────────────────────
+
+let drData = [];   // loaded separately from /api/datarates
+
+function rateLabel(template) {
+  const map = {
+    "high-density": "High Density",
+    "compatible":   "Compatible (default)",
+    "legacy":       "Legacy",
+    "no-legacy":    "No Legacy",
+  };
+  return map[template] || template || "Default";
+}
+
+function buildDataRatesSub() {
+  const total   = drData.length;
+  const enabled = drData.filter(w => w.high_density).length;
+  const status  = pctStatus(enabled, total);
+  const missing = total - enabled;
+
+  function settingHtml(w) {
+    if (w.high_density) return `<span style="color:var(--green);font-weight:600;">High Density</span>`;
+    const b24 = w.bands.includes("24") ? `2.4 GHz: <strong>${rateLabel(w.band_24)}</strong>` : "";
+    const b5  = w.bands.includes("5")  ? `5 GHz: <strong>${rateLabel(w.band_5)}</strong>`   : "";
+    const b6  = w.bands.includes("6")  ? `6 GHz: <strong>${rateLabel(w.band_6)}</strong>`   : "";
+    return `<span style="color:var(--yellow);font-size:12px;">${[b24, b5, b6].filter(Boolean).join(" &nbsp;·&nbsp; ")}</span>`;
+  }
+
+  function fixBtnHtml(w) {
+    if (w.high_density) return `<span style="font-size:12px;color:var(--muted);">✓ Best practice</span>`;
+    return `<button class="dr-fix-btn" data-wlan="${w.id}"
+              style="padding:5px 12px;font-size:12px;font-weight:600;border-radius:6px;border:none;
+                     cursor:pointer;background:linear-gradient(135deg,var(--purple),var(--indigo));
+                     color:#fff;white-space:nowrap;">
+              Set High Density
+            </button>
+            <div class="toggle-spinner" id="dr-spin-${w.id}" style="display:none;width:14px;height:14px;
+              border:2px solid var(--border);border-top-color:var(--purple);border-radius:50%;
+              animation:spin 0.8s linear infinite;margin-left:6px;"></div>
+            <div class="apply-result" id="dr-res-${w.id}" style="display:none;font-size:12px;margin-top:4px;"></div>`;
+  }
+
+  let tableHtml;
+  if (total === 0) {
+    tableHtml = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">No WLANs found.</div>`;
+  } else {
+    const rows = drData.map(w => {
+      const nameCls  = w.enabled ? "ssid-name" : "ssid-name ssid-disabled";
+      const scopeLbl = w.scope === "site"
+        ? `<span style="font-size:11px;color:var(--muted)">${w.site_name || w.scope_id}</span>`
+        : `<span style="font-size:11px;color:var(--muted)">Org template</span>`;
+      return `<tr id="dr-row-${w.id}">
+        <td class="${nameCls}">${w.ssid}${!w.enabled ? " (disabled)" : ""}</td>
+        <td>${scopeLbl}</td>
+        <td id="dr-setting-${w.id}" style="font-size:13px;">${settingHtml(w)}</td>
+        <td style="text-align:right;">${fixBtnHtml(w)}</td>
+      </tr>`;
+    }).join("");
+
+    tableHtml = `<div class="wlan-table-wrap"><table>
+      <thead><tr>
+        <th>SSID</th><th>Scope</th>
+        <th>Current Data Rate Setting</th>
+        <th style="text-align:right;">Best Practice Fix</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  const applyBtn = `<button class="btn-apply-all" id="dr-apply-all-btn" ${!missing ? "disabled" : ""}>
+    ${missing ? `Set All to High Density (${missing})` : "All High Density ✓"}</button>`;
+
+  const bodyHtml = `
+    <div style="padding:12px 20px 10px;font-size:12px;color:var(--muted);
+                background:rgba(124,58,237,0.06);border-bottom:1px solid var(--border);">
+      <strong style="color:var(--text);">Best practice:</strong>
+      High Density — disables 802.11b legacy rates (1/2/5.5/11 Mbps) on 2.4 GHz,
+      reducing airtime waste and improving throughput for all clients.
+    </div>
+    <div class="wlan-table-header">
+      <div class="wlan-table-title">${total} WLAN${total !== 1 ? "s" : ""}</div>
+      ${applyBtn}
+    </div>
+    ${tableHtml}`;
+
+  const sub = makeSubCard("sub-data-rates", "📶", "Data Rates",
+    "Check that all WLANs use High Density data rates (no 802.11b legacy rates)",
+    status, `${enabled}/${total}`, "WLANs on high density", bodyHtml);
+
+  async function applyDataRate(wlanId) {
+    const w    = drData.find(x => x.id === wlanId);
+    const spin = document.getElementById(`dr-spin-${wlanId}`);
+    const res  = document.getElementById(`dr-res-${wlanId}`);
+    const btn  = sub.querySelector(`button.dr-fix-btn[data-wlan="${wlanId}"]`);
+    if (btn) btn.disabled = true;
+    if (spin) spin.style.display = "inline-block";
+
+    try {
+      const r = await fetch(`/api/datarates/${ORG_ID}/${wlanId}`, {
+        method:  "POST",
+        headers: {"Content-Type": "application/json"},
+        body:    JSON.stringify({scope: w?.scope || "org", scope_id: w?.scope_id || ORG_ID}),
+      });
+      const resp = await r.json();
+      if (!r.ok) throw new Error(resp.error || `HTTP ${r.status}`);
+
+      if (w) { w.high_density = true; w.band_24 = "high-density"; w.band_5 = "high-density"; w.band_6 = "high-density"; }
+      const settingCell = document.getElementById(`dr-setting-${wlanId}`);
+      if (settingCell) settingCell.innerHTML = `<span style="color:var(--green);font-weight:600;">High Density</span>`;
+      const actionCell = btn?.closest("td");
+      if (actionCell) actionCell.innerHTML = `<span style="font-size:12px;color:var(--muted);">✓ Best practice</span>`;
+    } catch (err) {
+      if (res) { res.style.display = "block"; res.className = "apply-result err"; res.textContent = err.message; }
+      if (btn) btn.disabled = false;
+    } finally {
+      if (spin) spin.style.display = "none";
+    }
+
+    const newEnabled = drData.filter(x => x.high_density).length;
+    const newMissing = total - newEnabled;
+    const newStatus  = pctStatus(newEnabled, total);
+    const sc = document.getElementById("sub-data-rates");
+    if (sc) {
+      sc.className = `bp-sub status-${newStatus}${sc.classList.contains("expanded") ? " expanded" : ""}`;
+      sc.dataset.status = newStatus;
+      sc.querySelector(".bp-sub-score").textContent = `${newEnabled}/${total}`;
+      const badge = sc.querySelector(".bp-badge");
+      if (badge) { badge.className = `bp-badge ${newStatus}`; badge.textContent = badgeLabel(newStatus); }
+      const allBtn = document.getElementById("dr-apply-all-btn");
+      if (allBtn) { allBtn.textContent = newMissing > 0 ? `Set All to High Density (${newMissing})` : "All High Density ✓"; allBtn.disabled = !newMissing; }
+    }
+    refreshParentCard("wireless");
+  }
+
+  const drWarning = `Changing data rates will restart the radio on affected APs — connected clients will briefly disconnect.\n\nProceed?`;
+
+  sub.querySelectorAll("button.dr-fix-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (!confirm(drWarning)) return;
+      applyDataRate(btn.dataset.wlan);
+    });
+  });
+
+  const allBtn = sub.querySelector("#dr-apply-all-btn");
+  if (allBtn) {
+    allBtn.addEventListener("click", async () => {
+      if (!confirm(drWarning)) return;
+      allBtn.disabled = true; allBtn.textContent = "Applying…";
+      await Promise.allSettled(drData.filter(w => !w.high_density).map(w => applyDataRate(w.id)));
+      allBtn.textContent = "Done ✓";
+    });
+  }
+  return sub;
+}
+
 // ── Build RF Template sub-card ────────────────────────────────────────────────
 
 function buildRfTemplateSub(rf) {
@@ -823,6 +978,91 @@ function buildRfTemplateSub(rf) {
     });
   }
   return sub;
+}
+
+// ── Shared DNS / NTP sub-card builder ────────────────────────────────────────
+
+function buildDnsNtpSubCard(id, title, desc, dnsNtp) {
+  const tmpls    = (dnsNtp && dnsNtp.templates) || [];
+  const total    = dnsNtp.total     || 0;
+  const ntpCount = dnsNtp.ntp_count || 0;
+  const dnsCount = dnsNtp.dns_count || 0;
+  const possible = total * 2;
+  const enabled  = ntpCount + dnsCount;
+  const status   = dnsNtp.error ? "muted" : pctStatus(enabled, possible);
+
+  function serverChips(servers) {
+    if (!servers || !servers.length)
+      return `<span style="color:var(--red);font-size:12px">✗ Not set</span>`;
+    return servers.map(s => `<span class="chip-green" style="font-family:monospace;font-size:11px">${s}</span>`).join(" ");
+  }
+  function checkIcon(ok) {
+    return ok ? `<span style="color:var(--green);font-weight:700">✓</span>`
+              : `<span style="color:var(--red);font-weight:700">✗</span>`;
+  }
+
+  let bodyHtml;
+  if (dnsNtp.error) {
+    bodyHtml = `<div style="padding:16px;color:var(--muted);font-size:13px;">Error: ${dnsNtp.error}</div>`;
+  } else if (total === 0) {
+    bodyHtml = `<div style="padding:16px;color:var(--muted);font-size:13px;">No templates found for this org.</div>`;
+  } else {
+    const rows = tmpls.map(t => `
+      <tr>
+        <td style="font-weight:500">${t.name}</td>
+        <td style="text-align:center">${checkIcon(t.has_ntp)}</td>
+        <td>${serverChips(t.ntp_servers)}</td>
+        <td style="text-align:center">${checkIcon(t.has_dns)}</td>
+        <td>${serverChips(t.dns_servers)}</td>
+      </tr>`).join("");
+
+    let summary = "";
+    if (ntpCount < total) summary += `<span class="bp-badge red" style="margin-right:6px">${total - ntpCount} template${total - ntpCount !== 1 ? "s" : ""} missing NTP</span>`;
+    if (dnsCount < total) summary += `<span class="bp-badge red" style="margin-right:6px">${total - dnsCount} template${total - dnsCount !== 1 ? "s" : ""} missing DNS</span>`;
+    if (ntpCount === total && dnsCount === total) summary = `<span class="bp-badge green">All templates have NTP and DNS configured</span>`;
+
+    bodyHtml = `
+      <div style="margin-bottom:14px">${summary}</div>
+      <div class="wlan-table-wrap">
+        <table>
+          <thead><tr>
+            <th>Template</th>
+            <th class="filter-col">NTP</th>
+            <th>NTP Servers</th>
+            <th class="filter-col">DNS</th>
+            <th>DNS Servers</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="info-card" style="margin-top:14px">
+        <h4>Why this matters</h4>
+        <p>Without NTP, device clocks drift — causing certificate validation failures,
+          unreliable log timestamps, and 802.1X authentication issues. Without DNS, devices
+          cannot resolve hostnames for syslog, RADIUS, and management systems, breaking
+          centralised visibility and authentication.</p>
+      </div>`;
+  }
+
+  const scoreText  = total === 0 ? "—" : `${Math.min(ntpCount, dnsCount)}/${total}`;
+  const scoreLabel = total === 0 ? "no templates" : "templates fully configured";
+  return makeSubCard(id, "🌐", title, desc, status, scoreText, scoreLabel, bodyHtml);
+}
+
+function buildDnsNtpSub(dnsNtp) {
+  return buildDnsNtpSubCard(
+    "sub-dns-ntp",
+    "DNS & NTP Servers",
+    "Verify switch templates have NTP and DNS servers configured",
+    dnsNtp);
+}
+
+function buildWanDnsNtpSub(dnsNtp) {
+  return buildDnsNtpSubCard(
+    "sub-wan-dns-ntp",
+    "DNS & NTP Servers",
+    "Verify WAN/gateway templates have NTP and DNS servers configured",
+    dnsNtp);
 }
 
 // ── Build DPC sub-card ────────────────────────────────────────────────────────
@@ -1015,15 +1255,15 @@ function renderCategories(data) {
 
   const wireless = makeParentCard("wireless", "📡", "Wireless",
     "WLAN security and radio configuration checks",
-    [buildWlanSub(), buildBannedClientsSub(), buildRfTemplateSub(data.rf || {})]);
+    [buildWlanSub(), buildBannedClientsSub(), buildDataRatesSub(), buildRfTemplateSub(data.rf || {})]);
 
   const wired = makeParentCard("wired", "🔌", "Wired",
     "Switch port configuration and wired best practices",
-    [buildDpcSub(data.dpc || {})]);
+    [buildDpcSub(data.dpc || {}), buildDnsNtpSub(data.dns_ntp || {})]);
 
   const firewall = makeParentCard("firewall", "🛡️", "Firewall",
-    "Security policy and firewall rule checks",
-    []); // placeholder — no checks yet
+    "WAN / gateway template configuration checks",
+    [buildWanDnsNtpSub(data.wan_dns_ntp || {})]);
 
   const org = makeParentCard("org", "🏢", "Organization",
     "Licensing, subscriptions, and org-level settings",
@@ -1044,14 +1284,22 @@ async function load() {
   errEl.style.display   = "none";
 
   try {
-    const res  = await fetch(`/api/bestpractices/${ORG_ID}`);
-    const data = await res.json();
+    // Fetch best practices and data rates in parallel
+    const [res, drRes] = await Promise.all([
+      fetch(`/api/bestpractices/${ORG_ID}`),
+      fetch(`/api/datarates/${ORG_ID}`),
+    ]);
+
+    const data   = await res.json();
+    const drJson = drRes.ok ? await drRes.json() : {};
+
     if (!res.ok) {
       if (data.error === "Not authenticated") { window.location.href = "/login"; return; }
       throw new Error(data.error || `HTTP ${res.status}`);
     }
     wlanData   = data.wlans   || [];
     filterDefs = data.filters || [];
+    drData     = drJson.wlans || [];
 
     loadEl.style.display  = "none";
     cardsEl.style.display = "flex";
