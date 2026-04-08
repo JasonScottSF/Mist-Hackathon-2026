@@ -1322,6 +1322,36 @@ def api_troubleshoot(org_id):
 
 # ── Best Practices routes ─────────────────────────────────────────────────────
 
+GOLDEN_RF_TEMPLATE = {
+    "name": "golden config",
+    "country_code": "US",
+    # 2.4 GHz — "auto" mode: allow RRM to disable the band if needed
+    "band_24": {
+        "allow_rrm_disable": True,
+        "preamble":  "short",
+        "power_min": 4,
+        "power_max": 8,
+        "ant_gain":  0,
+        # channels omitted → automatic
+    },
+    # 5 GHz
+    "band_5": {
+        "bandwidth": 20,
+        "power_min": 6,
+        "power_max": 10,
+        "ant_gain":  0,
+    },
+    # 6 GHz
+    "band_6": {
+        "bandwidth": 40,
+        "power_min": 8,
+        "power_max": 17,
+        "ant_gain":  0,
+    },
+    # Dual-band radios: use 2.4 GHz on both
+    "band_24_usage": "24",
+}
+
 BP_FILTERS = [
     {
         "field":   "arp_filter",
@@ -1494,11 +1524,15 @@ def api_bestpractices(org_id):
         def _fetch_nacrules():
             return mist_get(sid, f"/orgs/{org_id}/nacrules")
 
+        def _fetch_rftemplates():
+            return mist_get(sid, f"/orgs/{org_id}/rftemplates")
+
         try:
-            with ThreadPoolExecutor(max_workers=3) as pool:
+            with ThreadPoolExecutor(max_workers=4) as pool:
                 f_subs    = pool.submit(_fetch_subs)
                 f_setting = pool.submit(_fetch_setting)
                 f_nac     = pool.submit(_fetch_nacrules)
+                f_rf      = pool.submit(_fetch_rftemplates)
 
             subs_raw = f_subs.result()
             subs = subs_raw if isinstance(subs_raw, list) else subs_raw.get("results", [])
@@ -1574,12 +1608,29 @@ def api_bestpractices(org_id):
             licenses_info = {"error": str(e), "subscriptions": []}
             aa_info       = {"error": str(e)}
 
+        # 5. RF template — check for "golden config"
+        rf_info = {}
+        try:
+            rf_raw  = f_rf.result()
+            rf_list = rf_raw if isinstance(rf_raw, list) else rf_raw.get("results", [])
+            golden  = next((t for t in rf_list
+                            if t.get("name", "").lower() == "golden config"), None)
+            rf_info = {
+                "exists": golden is not None,
+                "id":     golden.get("id")   if golden else None,
+                "name":   golden.get("name") if golden else None,
+            }
+        except Exception as e:
+            _log.warning("RF template check failed: %s", e)
+            rf_info = {"exists": False, "error": str(e)}
+
         return jsonify({
             "wlans":    result,
             "filters":  BP_FILTERS,
             "dpc":      dpc_info,
             "licenses": licenses_info,
             "aa":       aa_info,
+            "rf":       rf_info,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1630,6 +1681,43 @@ def api_bestpractices_apply(org_id, wlan_id):
         r = mist_put(sid, put_path, {field: True})
         if r.ok:
             return jsonify({"status": "applied", "field": field})
+        try:
+            detail = r.json().get("detail", r.text[:300])
+        except Exception:
+            detail = r.text[:300]
+        return jsonify({"status": "error", "detail": detail}), r.status_code
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rftemplate/<org_id>", methods=["POST"])
+def api_create_rf_template(org_id):
+    """Create the golden config RF template for the org."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    try:
+        # Check if it already exists
+        rf_raw  = mist_get(sid, f"/orgs/{org_id}/rftemplates")
+        rf_list = rf_raw if isinstance(rf_raw, list) else rf_raw.get("results", [])
+        existing = next((t for t in rf_list
+                         if t.get("name", "").lower() == "golden config"), None)
+        if existing:
+            return jsonify({"status": "already_exists", "id": existing["id"], "name": existing["name"]})
+
+        actor = _sessions[sid].get("email", "unknown")
+        _log.info("RF_TEMPLATE_CREATE org=%s actor=%s ip=%s", org_id, actor, request.remote_addr)
+
+        r = mist_post(sid, f"/orgs/{org_id}/rftemplates", GOLDEN_RF_TEMPLATE)
+        if r.ok:
+            created = r.json()
+            return jsonify({"status": "created", "id": created.get("id"), "name": created.get("name")})
         try:
             detail = r.json().get("detail", r.text[:300])
         except Exception:

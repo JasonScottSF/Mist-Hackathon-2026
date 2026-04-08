@@ -717,6 +717,114 @@ function buildWlanSub() {
   return sub;
 }
 
+// ── Build RF Template sub-card ────────────────────────────────────────────────
+
+function buildRfTemplateSub(rf) {
+  const exists = rf && rf.exists;
+  const status = exists ? "green" : "red";
+
+  const SETTINGS_HTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:4px">
+      <div class="info-card" style="margin-top:0">
+        <h4>📶 2.4 GHz</h4>
+        <p>Band: Auto (RRM managed)<br>
+           Preamble: Short<br>
+           Power: Automatic (4–8 dBm)<br>
+           Channels: Automatic<br>
+           External gain: 0 dBi</p>
+      </div>
+      <div class="info-card" style="margin-top:0">
+        <h4>📡 5 GHz</h4>
+        <p>Band: Enabled<br>
+           Channel width: 20 MHz<br>
+           Power: Automatic (6–10 dBm)<br>
+           Channels: Automatic<br>
+           External gain: 0 dBi</p>
+      </div>
+      <div class="info-card" style="margin-top:0">
+        <h4>🔵 6 GHz</h4>
+        <p>Band: Enabled<br>
+           Channel width: 40 MHz<br>
+           Power: Automatic (8–17 dBm)<br>
+           Channels: Automatic<br>
+           External gain: 0 dBi</p>
+      </div>
+      <div class="info-card" style="margin-top:0">
+        <h4>⚙️ General</h4>
+        <p>Country: United States<br>
+           Dual-band: 2.4 GHz for both radios</p>
+      </div>
+    </div>`;
+
+  let bodyHtml;
+  if (exists) {
+    bodyHtml = `
+      <div style="margin-bottom:12px">
+        <span class="bp-badge green">✓ Template exists</span>
+        <span style="font-size:12px;color:var(--muted);margin-left:10px">ID: ${rf.id || "—"}</span>
+      </div>
+      ${SETTINGS_HTML}`;
+  } else {
+    bodyHtml = `
+      <div class="info-card" style="margin-bottom:14px">
+        <h4>Golden Config RF Template</h4>
+        <p>No RF template named <strong style="color:var(--text)">"golden config"</strong> was found
+          for this org. Click below to create it with the standard recommended settings.</p>
+      </div>
+      ${SETTINGS_HTML}
+      <div style="margin-top:16px;display:flex;align-items:center;gap:12px">
+        <button class="btn-apply-all" id="create-rf-btn">Create Golden Config</button>
+        <div id="create-rf-result" style="font-size:13px;display:none"></div>
+      </div>`;
+  }
+
+  const sub = makeSubCard("sub-rf", "📻", "RF Template — Golden Config",
+    "Standard RF settings for 2.4 / 5 / 6 GHz · United States",
+    status,
+    exists ? "Exists" : "Missing",
+    exists ? "template found" : "not configured",
+    bodyHtml);
+
+  if (!exists) {
+    sub.querySelector("#create-rf-btn")?.addEventListener("click", async () => {
+      const btn = sub.querySelector("#create-rf-btn");
+      const res = sub.querySelector("#create-rf-result");
+      btn.disabled = true;
+      btn.textContent = "Creating…";
+      res.style.display = "none";
+      try {
+        const r    = await fetch(`/api/rftemplate/${ORG_ID}`, { method: "POST" });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || data.detail || `HTTP ${r.status}`);
+
+        const finalStatus = (data.status === "created" || data.status === "already_exists") ? "green" : "red";
+        sub.className     = `bp-sub status-${finalStatus}${sub.classList.contains("expanded") ? " expanded" : ""}`;
+        sub.dataset.status = finalStatus;
+        sub.querySelector(".bp-sub-score").textContent      = "Exists";
+        sub.querySelector(".bp-sub-score-label").textContent = "template found";
+        const badge = sub.querySelector(".bp-badge");
+        if (badge) { badge.className = `bp-badge ${finalStatus}`; badge.textContent = badgeLabel(finalStatus); }
+
+        btn.style.display = "none";
+        res.style.display = "block";
+        res.style.color   = "var(--green)";
+        res.textContent   = data.status === "already_exists"
+          ? "Template already existed ✓"
+          : `Created successfully ✓  (ID: ${data.id})`;
+
+        refreshParentCard("wireless");
+      } catch (e) {
+        btn.disabled    = false;
+        btn.textContent = "Create Golden Config";
+        res.style.display = "block";
+        res.style.color   = "var(--red)";
+        res.textContent   = `Error: ${e.message}`;
+      }
+    });
+  }
+  return sub;
+}
+
 // ── Build DPC sub-card ────────────────────────────────────────────────────────
 
 function buildDpcSub(dpc) {
@@ -907,7 +1015,7 @@ function renderCategories(data) {
 
   const wireless = makeParentCard("wireless", "📡", "Wireless",
     "WLAN security and radio configuration checks",
-    [buildWlanSub(), buildBannedClientsSub()]);
+    [buildWlanSub(), buildBannedClientsSub(), buildRfTemplateSub(data.rf || {})]);
 
   const wired = makeParentCard("wired", "🔌", "Wired",
     "Switch port configuration and wired best practices",
