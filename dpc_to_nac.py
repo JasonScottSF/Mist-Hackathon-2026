@@ -4,6 +4,7 @@ import time
 import uuid
 import logging
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -99,6 +100,15 @@ def mist_post(sid, path, body):
     csrf  = next((v for k, v in rs.cookies.items() if k.startswith("csrftoken")), None)
     headers = {"X-CSRFToken": csrf} if csrf else {}
     return rs.post(mist_url(host, path), json=body, headers=headers, timeout=20)
+
+
+def mist_put(sid, path, body):
+    store = _sessions[sid]
+    rs    = store["requests_session"]
+    host  = store["cloud_host"]
+    csrf  = next((v for k, v in rs.cookies.items() if k.startswith("csrftoken")), None)
+    headers = {"X-CSRFToken": csrf} if csrf else {}
+    return rs.put(mist_url(host, path), json=body, headers=headers, timeout=20)
 
 
 def authed(sid):
