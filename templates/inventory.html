@@ -79,27 +79,17 @@
     /* ── Toolbar ── */
     .toolbar {
       display: flex; align-items: center; gap: 10px;
-      flex-wrap: wrap; margin-bottom: 12px;
+      flex-wrap: wrap; margin-bottom: 16px;
     }
     .search-input {
       padding: 8px 12px; background: var(--surface); border: 1px solid var(--border);
       border-radius: 7px; color: var(--text); font-size: 13px; outline: none;
-      width: 220px; transition: border-color 0.2s;
+      width: 260px; transition: border-color 0.2s;
     }
     .search-input:focus { border-color: var(--purple); }
     .search-input::placeholder { color: var(--muted); }
 
-    .type-filters { display: flex; gap: 4px; }
-    .type-btn {
-      padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border);
-      background: transparent; color: var(--muted); font-size: 12px;
-      font-weight: 500; cursor: pointer; transition: all 0.15s;
-    }
-    .type-btn:hover { border-color: var(--purple); color: var(--text); }
-    .type-btn.active { background: rgba(124,58,237,0.15); border-color: var(--purple); color: #a78bfa; }
-
     .toolbar-sep { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
-
     .sel-group { display: flex; align-items: center; gap: 6px; }
     .sel-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
     .btn-sm {
@@ -108,30 +98,22 @@
       cursor: pointer; white-space: nowrap; transition: all 0.15s;
     }
     .btn-sm:hover { background: var(--surface2); color: var(--text); }
-
     .ver-input {
       padding: 6px 10px; background: var(--surface); border: 1px solid var(--border);
       border-radius: 6px; color: var(--text); font-size: 12px; font-family: monospace;
-      width: 150px; outline: none;
+      width: 160px; outline: none;
     }
     .ver-input:focus { border-color: var(--purple); }
 
     /* ── Upgrade bar ── */
     #upgrade-bar {
-      display: none;
-      background: var(--surface2); border: 1px solid var(--purple);
+      display: none; background: var(--surface2); border: 1px solid var(--purple);
       border-radius: 8px; padding: 14px 18px;
-      flex-direction: column; gap: 10px;
-      margin-bottom: 12px;
+      flex-direction: column; gap: 10px; margin-bottom: 16px;
     }
     .upgrade-header { font-size: 13px; font-weight: 600; color: #a78bfa; }
-    .upgrade-type-row {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    }
-    .upgrade-type-label {
-      font-size: 12px; color: var(--muted); white-space: nowrap;
-      min-width: 160px;
-    }
+    .upgrade-type-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .upgrade-type-label { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 160px; }
     .upgrade-ver-input {
       padding: 7px 12px; background: var(--bg); border: 1px solid var(--border);
       border-radius: 6px; color: var(--text); font-size: 13px; font-family: monospace;
@@ -146,38 +128,87 @@
     }
     .btn-upgrade:hover { opacity: 0.88; }
     .btn-upgrade:disabled { opacity: 0.4; cursor: not-allowed; }
-    .upgrade-result {
-      font-size: 13px; padding: 8px 14px; border-radius: 6px; line-height: 1.6;
-    }
+    .upgrade-result { font-size: 13px; padding: 8px 14px; border-radius: 6px; line-height: 1.6; }
     .upgrade-result.ok    { background: rgba(34,197,94,0.12);  color: var(--green); }
     .upgrade-result.error { background: rgba(239,68,68,0.12);  color: var(--red);   }
 
-    /* ── Table ── */
-    .table-wrap {
+    /* ── Device cards ── */
+    .inv-card {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; overflow: auto;
+      border-radius: 14px; overflow: hidden; margin-bottom: 16px;
+      transition: border-color 0.2s;
     }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
+    .inv-card.status-green  { border-left: 4px solid var(--green);  }
+    .inv-card.status-yellow { border-left: 4px solid var(--yellow); }
+    .inv-card.status-red    { border-left: 4px solid var(--red);    }
+    .inv-card.status-muted  { border-left: 4px solid var(--muted);  }
+
+    .inv-card-header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 18px 24px; cursor: pointer; user-select: none;
+      transition: background 0.15s;
+    }
+    .inv-card-header:hover { background: var(--surface2); }
+
+    .inv-card-icon {
+      width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+    }
+    .inv-card.status-green  .inv-card-icon { background: rgba(34,197,94,0.12);  }
+    .inv-card.status-yellow .inv-card-icon { background: rgba(245,158,11,0.12); }
+    .inv-card.status-red    .inv-card-icon { background: rgba(239,68,68,0.12);  }
+    .inv-card.status-muted  .inv-card-icon { background: rgba(107,114,128,0.12); }
+
+    .inv-card-info { flex: 1; min-width: 0; }
+    .inv-card-title { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+    .inv-card-desc  { font-size: 13px; color: var(--muted); }
+
+    .inv-card-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+
+    .inv-score { font-size: 22px; font-weight: 700; line-height: 1; }
+    .inv-card.status-green  .inv-score { color: var(--green);  }
+    .inv-card.status-yellow .inv-score { color: var(--yellow); }
+    .inv-card.status-red    .inv-score { color: var(--red);    }
+    .inv-card.status-muted  .inv-score { color: var(--muted);  }
+
+    .inv-score-label { font-size: 11px; color: var(--muted); margin-top: 2px; text-align: right; }
+
+    .inv-badge {
+      font-size: 11px; font-weight: 700; padding: 4px 12px;
+      border-radius: 99px; white-space: nowrap;
+    }
+    .inv-badge.green  { background: rgba(34,197,94,0.12);  color: var(--green);  border: 1px solid rgba(34,197,94,0.25); }
+    .inv-badge.yellow { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
+    .inv-badge.red    { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+    .inv-badge.muted  { background: rgba(107,114,128,0.12); color: var(--muted); border: 1px solid rgba(107,114,128,0.25); }
+
+    .inv-chevron { color: var(--muted); font-size: 12px; transition: transform 0.2s; }
+    .inv-card.expanded .inv-chevron { transform: rotate(180deg); }
+
+    .inv-card-body { display: none; border-top: 1px solid var(--border); }
+    .inv-card.expanded .inv-card-body { display: block; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 820px; }
 
     thead th {
-      padding: 10px 14px; background: var(--surface);
+      padding: 10px 16px; background: var(--surface2);
       text-align: left; font-size: 11px; font-weight: 500;
       text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
       border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; z-index: 10; user-select: none;
-      white-space: nowrap;
+      user-select: none; white-space: nowrap;
     }
     thead th.sortable { cursor: pointer; }
     thead th.sortable:hover { color: var(--text); }
-    thead th.sort-asc  { color: var(--text); }
-    thead th.sort-desc { color: var(--text); }
+    thead th.sort-asc, thead th.sort-desc { color: var(--text); }
     .sort-arrow { margin-left: 4px; font-size: 10px; }
 
     tbody tr { transition: background 0.1s; }
     tbody tr:hover { background: var(--surface2); }
     tbody tr.selected { background: rgba(124,58,237,0.08); }
     tbody tr.selected:hover { background: rgba(124,58,237,0.14); }
-    tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody td { padding: 10px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     tbody tr:last-child td { border-bottom: none; }
 
     .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
@@ -198,10 +229,8 @@
       background: var(--surface2); border-radius: 4px; color: var(--text);
       border: 1px solid var(--border);
     }
-
-    .no-rows { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
-
-    .device-count { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .no-rows { text-align: center; padding: 32px; color: var(--muted); font-size: 13px; }
+    .card-device-count { font-size: 12px; color: var(--muted); padding: 10px 16px 0; }
   </style>
 </head>
 <body>
@@ -236,7 +265,6 @@
 </main>
 
 <datalist id="ver-datalist"></datalist>
-<datalist id="avail-datalist"></datalist>
 
 <script>
 const ORG_ID = {{ org_id | tojson }};
@@ -245,11 +273,16 @@ let allDevices  = [];
 let availVers   = {};
 let sortCol     = "name";
 let sortAsc     = true;
-let typeFilter  = "all";
 let searchTerm  = "";
 let selectedIds = new Set();
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+const TYPE_DEFS = [
+  { key: "ap",      label: "Access Points", icon: "📡" },
+  { key: "switch",  label: "Switches",      icon: "🔀" },
+  { key: "gateway", label: "Gateways",      icon: "🌐" },
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function versionCmp(a, b) {
   a = a || ""; b = b || "";
@@ -283,137 +316,163 @@ function statusDot(s) {
   return `<span class="status-dot ${cls}"></span>${s || "—"}`;
 }
 
-// ── Filtering & sorting ───────────────────────────────────────────────────────
+function cardStatus(connected, total) {
+  if (total === 0)                         return "muted";
+  const pct = connected / total;
+  if (pct >= 1)                            return "green";
+  if (pct >= 0.5)                          return "yellow";
+  return "red";
+}
 
-function visibleDevices() {
-  return allDevices.filter(d => {
-    if (typeFilter !== "all" && d.type !== typeFilter) return false;
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      if (!(d.name || "").toLowerCase().includes(q) &&
-          !(d.model || "").toLowerCase().includes(q) &&
-          !(d.ip || "").includes(q) &&
-          !(d.mac || "").includes(q) &&
-          !(d.site_name || "").toLowerCase().includes(q) &&
-          !(d.version || "").includes(q)) return false;
-    }
-    return true;
+function badgeLabel(status) {
+  if (status === "green")  return "✓ All Online";
+  if (status === "yellow") return "⚠ Partial";
+  if (status === "red")    return "✗ Offline";
+  return "No Devices";
+}
+
+// ── Filtering / sorting for a type ────────────────────────────────────────────
+
+function devicesOfType(typeKey) {
+  return allDevices.filter(d => d.type === typeKey).filter(d => {
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase();
+    return (d.name || "").toLowerCase().includes(q) ||
+           (d.model || "").toLowerCase().includes(q) ||
+           (d.ip || "").includes(q) ||
+           (d.mac || "").includes(q) ||
+           (d.site_name || "").toLowerCase().includes(q) ||
+           (d.version || "").includes(q);
   }).sort((a, b) => {
     let va = a[sortCol] ?? "", vb = b[sortCol] ?? "";
     let cmp;
-    if (sortCol === "version") {
-      cmp = versionCmp(String(va), String(vb));
-    } else if (sortCol === "uptime") {
-      cmp = (Number(va) || 0) - (Number(vb) || 0);
-    } else {
-      cmp = String(va).localeCompare(String(vb));
-    }
+    if (sortCol === "version") cmp = versionCmp(String(va), String(vb));
+    else if (sortCol === "uptime") cmp = (Number(va) || 0) - (Number(vb) || 0);
+    else cmp = String(va).localeCompare(String(vb));
     return sortAsc ? cmp : -cmp;
   });
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// ── Render type table body ─────────────────────────────────────────────────────
 
-function renderTable() {
-  const devices = visibleDevices();
-  const tbody   = document.getElementById("device-tbody");
-  const count   = document.getElementById("device-count");
-  const selAll  = document.getElementById("sel-all-check");
+function renderTypeTable(typeKey) {
+  const tbody = document.getElementById(`tbody-${typeKey}`);
+  const count = document.getElementById(`count-${typeKey}`);
+  if (!tbody) return;
 
-  count.textContent = `${devices.length} device${devices.length !== 1 ? "s" : ""}`;
+  const devices = devicesOfType(typeKey);
+  if (count) count.textContent = `${devices.length} device${devices.length !== 1 ? "s" : ""}${searchTerm ? " matching" : ""}`;
 
   if (!devices.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="no-rows">No devices match your filter.</td></tr>`;
-    updateSelAll();
+    tbody.innerHTML = `<tr><td colspan="8" class="no-rows">${searchTerm ? "No devices match your search." : "No devices."}</td></tr>`;
     return;
   }
 
   tbody.innerHTML = devices.map(d => {
     const checked = selectedIds.has(d.id) ? "checked" : "";
     const rowCls  = selectedIds.has(d.id) ? "selected" : "";
-    return `
-      <tr class="${rowCls}" data-id="${d.id}">
-        <td><input type="checkbox" ${checked} onchange="toggleRow('${d.id}', this.checked)"></td>
-        <td style="font-weight:500">${d.name || d.mac || "—"}</td>
-        <td>${typeChip(d.type)}</td>
-        <td style="color:var(--muted)">${d.model || "—"}</td>
-        <td style="color:var(--muted)">${d.site_name || "—"}</td>
-        <td>${statusDot(d.status)}</td>
-        <td style="font-family:monospace;font-size:12px">${d.ip || "—"}</td>
-        <td><span class="ver-chip">${d.version || "—"}</span></td>
-        <td style="color:var(--muted)">${formatUptime(d.uptime)}</td>
-      </tr>`;
+    return `<tr class="${rowCls}" data-id="${d.id}">
+      <td><input type="checkbox" ${checked} onchange="toggleRow('${d.id}', this.checked)"></td>
+      <td style="font-weight:500">${d.name || d.mac || "—"}</td>
+      <td style="color:var(--muted)">${d.model || "—"}</td>
+      <td style="color:var(--muted)">${d.site_name || "—"}</td>
+      <td>${statusDot(d.status)}</td>
+      <td style="font-family:monospace;font-size:12px">${d.ip || "—"}</td>
+      <td><span class="ver-chip">${d.version || "—"}</span></td>
+      <td style="color:var(--muted)">${formatUptime(d.uptime)}</td>
+    </tr>`;
   }).join("");
+}
 
-  updateSelAll();
+function renderAllTables() {
+  TYPE_DEFS.forEach(t => renderTypeTable(t.key));
+  updateCardHeaders();
   updateUpgradeBar();
 }
 
-function updateSortHeaders() {
-  document.querySelectorAll("thead th.sortable").forEach(th => {
-    const col = th.dataset.col;
-    th.classList.remove("sort-asc", "sort-desc");
-    th.querySelector(".sort-arrow").textContent = "";
-    if (col === sortCol) {
-      th.classList.add(sortAsc ? "sort-asc" : "sort-desc");
-      th.querySelector(".sort-arrow").textContent = sortAsc ? "↑" : "↓";
+// ── Update card header scores ──────────────────────────────────────────────────
+
+function updateCardHeaders() {
+  TYPE_DEFS.forEach(({ key }) => {
+    const all    = allDevices.filter(d => d.type === key);
+    const conn   = all.filter(d => d.status === "connected").length;
+    const status = cardStatus(conn, all.length);
+
+    const card = document.getElementById(`card-${key}`);
+    if (!card) return;
+    card.className = card.className.replace(/status-\w+/, `status-${status}`);
+
+    const scoreEl = card.querySelector(".inv-score");
+    const labelEl = card.querySelector(".inv-score-label");
+    const badgeEl = card.querySelector(".inv-badge");
+
+    if (scoreEl) scoreEl.textContent = `${conn}/${all.length}`;
+    if (labelEl) labelEl.textContent = "online";
+    if (badgeEl) {
+      badgeEl.textContent = badgeLabel(status);
+      badgeEl.className   = `inv-badge ${status}`;
     }
   });
 }
 
-// ── Sort ──────────────────────────────────────────────────────────────────────
+// ── Sort ───────────────────────────────────────────────────────────────────────
 
-function sortBy(col) {
-  if (sortCol === col) { sortAsc = !sortAsc; }
+function sortBy(col, typeKey) {
+  if (sortCol === col) sortAsc = !sortAsc;
   else { sortCol = col; sortAsc = true; }
-  updateSortHeaders();
-  renderTable();
+
+  // Update sort arrows in all tables
+  document.querySelectorAll(".sortable").forEach(th => {
+    th.classList.remove("sort-asc", "sort-desc");
+    const arr = th.querySelector(".sort-arrow");
+    if (arr) arr.textContent = "";
+    if (th.dataset.col === sortCol) {
+      th.classList.add(sortAsc ? "sort-asc" : "sort-desc");
+      if (arr) arr.textContent = sortAsc ? "↑" : "↓";
+    }
+  });
+
+  TYPE_DEFS.forEach(t => renderTypeTable(t.key));
 }
 
-// ── Selection ─────────────────────────────────────────────────────────────────
+// ── Selection ──────────────────────────────────────────────────────────────────
 
 function toggleRow(id, checked) {
   checked ? selectedIds.add(id) : selectedIds.delete(id);
   const row = document.querySelector(`tr[data-id="${id}"]`);
   if (row) row.classList.toggle("selected", checked);
-  updateSelAll();
   updateUpgradeBar();
 }
 
-function updateSelAll() {
-  const vis  = visibleDevices();
-  const chk  = document.getElementById("sel-all-check");
-  if (!chk) return;
-  const selCount = vis.filter(d => selectedIds.has(d.id)).length;
-  chk.checked       = vis.length > 0 && selCount === vis.length;
-  chk.indeterminate = selCount > 0 && selCount < vis.length;
+function toggleAll(checked) {
+  allDevices.filter(d => {
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase();
+    return (d.name || "").toLowerCase().includes(q) || (d.model || "").toLowerCase().includes(q) ||
+           (d.ip || "").includes(q) || (d.mac || "").includes(q) ||
+           (d.site_name || "").toLowerCase().includes(q) || (d.version || "").includes(q);
+  }).forEach(d => checked ? selectedIds.add(d.id) : selectedIds.delete(d.id));
+  renderAllTables();
 }
 
-function toggleAll(checked) {
-  visibleDevices().forEach(d => checked ? selectedIds.add(d.id) : selectedIds.delete(d.id));
-  renderTable();
-}
+function clearSelection() { selectedIds.clear(); renderAllTables(); }
 
 function selectVersion(invert) {
   const ver = document.getElementById("ver-filter").value.trim();
   if (!ver) return;
-  visibleDevices().forEach(d => {
+  allDevices.forEach(d => {
     const match = (d.version || "") === ver;
-    (invert ? !match : match) ? selectedIds.add(d.id) : null;
+    if (invert ? !match : match) selectedIds.add(d.id);
   });
-  renderTable();
+  renderAllTables();
 }
 
-function clearSelection() {
-  selectedIds.clear();
-  renderTable();
-}
+// ── Upgrade bar ────────────────────────────────────────────────────────────────
 
 function updateUpgradeBar() {
   const bar = document.getElementById("upgrade-bar");
   if (!selectedIds.size) { bar.style.display = "none"; return; }
 
-  // Group selected devices by type
   const byType = {};
   allDevices.filter(d => selectedIds.has(d.id)).forEach(d => {
     const t = d.type || "ap";
@@ -426,58 +485,40 @@ function updateUpgradeBar() {
   const TYPE_LABELS = { ap: "AP", switch: "Switch", gateway: "Gateway" };
 
   const typeRows = Object.entries(byType).map(([t, ids]) => {
-    const label   = `${TYPE_LABELS[t] || t} firmware (${ids.length} device${ids.length !== 1 ? "s" : ""}):`;
     const options = (availVers[t] || []).map(v => `<option value="${v}">`).join("");
-    return `
-      <div class="upgrade-type-row">
-        <span class="upgrade-type-label">${label}</span>
-        <input class="upgrade-ver-input" id="target-version-${t}"
-               list="avail-datalist-${t}" placeholder="${t} version…">
-        <datalist id="avail-datalist-${t}">${options}</datalist>
-      </div>`;
+    return `<div class="upgrade-type-row">
+      <span class="upgrade-type-label">${TYPE_LABELS[t] || t} firmware (${ids.length} device${ids.length !== 1 ? "s" : ""}):</span>
+      <input class="upgrade-ver-input" id="target-version-${t}" list="avail-datalist-${t}" placeholder="${t} version…">
+      <datalist id="avail-datalist-${t}">${options}</datalist>
+    </div>`;
   }).join("");
 
   bar.innerHTML = `
-    <div class="upgrade-header">
-      ${total} device${total !== 1 ? "s" : ""} selected &mdash; ${breakdown}
-    </div>
+    <div class="upgrade-header">${total} device${total !== 1 ? "s" : ""} selected &mdash; ${breakdown}</div>
     ${typeRows}
     <div class="upgrade-actions">
       <button class="btn-upgrade" id="upgrade-btn" onclick="upgradeSelected()">Upgrade</button>
       <div id="upgrade-result" style="display:none" class="upgrade-result"></div>
     </div>`;
-
   bar.style.display = "flex";
 }
 
-// ── Version datalists ─────────────────────────────────────────────────────────
-
-function populateDatalist(id, versions) {
-  const dl = document.getElementById(id);
-  dl.innerHTML = [...new Set(versions)].sort(versionCmp).reverse()
-    .map(v => `<option value="${v}">`).join("");
-}
-
-// ── Upgrade ───────────────────────────────────────────────────────────────────
+// ── Upgrade ────────────────────────────────────────────────────────────────────
 
 async function upgradeSelected() {
   if (!selectedIds.size) return;
-
-  // Build per-type upgrade jobs from the dynamic inputs
   const byType = {};
   allDevices.filter(d => selectedIds.has(d.id)).forEach(d => {
     const t = d.type || "ap";
     if (!byType[t]) byType[t] = [];
     byType[t].push(d.id);
   });
-
   const jobs = [];
   for (const [t, ids] of Object.entries(byType)) {
     const version = (document.getElementById(`target-version-${t}`)?.value || "").trim();
     if (!version) { alert(`Please enter a target firmware version for ${t} devices.`); return; }
     jobs.push({ type: t, device_ids: ids, version });
   }
-
   const summary = jobs.map(j => `  ${j.device_ids.length} ${j.type} → ${j.version}`).join("\n");
   if (!confirm(`Upgrade the following?\n\n${summary}\n\nDevices will reboot when the download completes.`)) return;
 
@@ -491,16 +532,12 @@ async function upgradeSelected() {
   for (const job of jobs) {
     try {
       const res  = await fetch(`/api/upgrade/${ORG_ID}`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ device_ids: job.device_ids, version: job.version }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body:   JSON.stringify({ device_ids: job.device_ids, version: job.version }),
       });
       const data = await res.json();
-      results.push({
-        type: job.type, count: job.device_ids.length, version: job.version,
-        ok:   res.ok && data.status === "ok",
-        detail: data.detail || data.error || "",
-      });
+      results.push({ type: job.type, count: job.device_ids.length, version: job.version,
+        ok: res.ok && data.status === "ok", detail: data.detail || data.error || "" });
     } catch (e) {
       results.push({ type: job.type, count: job.device_ids.length, version: job.version, ok: false, detail: e.message });
     }
@@ -512,14 +549,68 @@ async function upgradeSelected() {
   resultEl.innerHTML = results.map(r =>
     `${r.ok ? "✓" : "✗"} ${r.type}: ${r.count} device${r.count !== 1 ? "s" : ""} → ${r.version}${r.detail ? ` — ${r.detail}` : ""}`
   ).join("<br>");
-
-  if (allOk) { selectedIds.clear(); renderTable(); }
-
-  btn.disabled    = false;
-  btn.textContent = "Upgrade";
+  if (allOk) { selectedIds.clear(); renderAllTables(); }
+  btn.disabled = false; btn.textContent = "Upgrade";
 }
 
-// ── Load ──────────────────────────────────────────────────────────────────────
+// ── Build card HTML ────────────────────────────────────────────────────────────
+
+function buildCards() {
+  const cardsHtml = TYPE_DEFS.map(({ key, label, icon }) => {
+    const all    = allDevices.filter(d => d.type === key);
+    const conn   = all.filter(d => d.status === "connected").length;
+    const status = cardStatus(conn, all.length);
+
+    const thead = `<thead><tr>
+      <th style="width:36px"><input type="checkbox" onchange="toggleAll(this.checked)"></th>
+      <th class="sortable" data-col="name"      onclick="sortBy('name','${key}')">Name <span class="sort-arrow">↑</span></th>
+      <th class="sortable" data-col="model"     onclick="sortBy('model','${key}')">Model <span class="sort-arrow"></span></th>
+      <th class="sortable" data-col="site_name" onclick="sortBy('site_name','${key}')">Site <span class="sort-arrow"></span></th>
+      <th class="sortable" data-col="status"    onclick="sortBy('status','${key}')">Status <span class="sort-arrow"></span></th>
+      <th class="sortable" data-col="ip"        onclick="sortBy('ip','${key}')">IP Address <span class="sort-arrow"></span></th>
+      <th class="sortable" data-col="version"   onclick="sortBy('version','${key}')">Firmware <span class="sort-arrow"></span></th>
+      <th class="sortable" data-col="uptime"    onclick="sortBy('uptime','${key}')">Uptime <span class="sort-arrow"></span></th>
+    </tr></thead>`;
+
+    return `
+    <div class="inv-card status-${status}" id="card-${key}">
+      <div class="inv-card-header" onclick="document.getElementById('card-${key}').classList.toggle('expanded')">
+        <div class="inv-card-icon">${icon}</div>
+        <div class="inv-card-info">
+          <div class="inv-card-title">${label}</div>
+          <div class="inv-card-desc">${all.length} device${all.length !== 1 ? "s" : ""} in org</div>
+        </div>
+        <div class="inv-card-right">
+          <div>
+            <div class="inv-score">${conn}/${all.length}</div>
+            <div class="inv-score-label">online</div>
+          </div>
+          <span class="inv-badge ${status}">${badgeLabel(status)}</span>
+          <span class="inv-chevron">▼</span>
+        </div>
+      </div>
+      <div class="inv-card-body">
+        <div class="card-device-count" id="count-${key}"></div>
+        <div class="table-wrap">
+          <table>${thead}<tbody id="tbody-${key}"></tbody></table>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+
+  return cardsHtml;
+}
+
+// ── Populate version datalist ──────────────────────────────────────────────────
+
+function populateDatalist(id, versions) {
+  const dl = document.getElementById(id);
+  if (!dl) return;
+  dl.innerHTML = [...new Set(versions)].sort(versionCmp).reverse()
+    .map(v => `<option value="${v}">`).join("");
+}
+
+// ── Load ───────────────────────────────────────────────────────────────────────
 
 async function load() {
   const loadEl = document.getElementById("loading");
@@ -538,26 +629,15 @@ async function load() {
       throw new Error(data.error || `HTTP ${res.status}`);
     }
 
-    allDevices = data.devices || [];
+    allDevices = data.devices      || [];
     availVers  = data.avail_versions || {};
 
-    // Populate version filter datalist with unique current versions
     const curVersions = [...new Set(allDevices.map(d => d.version).filter(Boolean))];
     populateDatalist("ver-datalist", curVersions);
-
-    // Populate upgrade target datalist with all available versions
-    const allAvail = Object.values(availVers).flat().filter(Boolean);
-    populateDatalist("avail-datalist", allAvail.length ? allAvail : curVersions);
 
     contEl.innerHTML = `
       <div class="toolbar">
         <input class="search-input" id="search-box" placeholder="Search name, model, IP, version…" oninput="onSearch(this.value)">
-        <div class="type-filters">
-          <button class="type-btn active" data-type="all"     onclick="setType('all',this)">All</button>
-          <button class="type-btn"        data-type="ap"      onclick="setType('ap',this)">AP</button>
-          <button class="type-btn"        data-type="switch"  onclick="setType('switch',this)">Switch</button>
-          <button class="type-btn"        data-type="gateway" onclick="setType('gateway',this)">Gateway</button>
-        </div>
         <div class="toolbar-sep"></div>
         <div class="sel-group">
           <span class="sel-label">Select:</span>
@@ -567,37 +647,17 @@ async function load() {
         <div class="sel-group">
           <span class="sel-label">Version:</span>
           <input class="ver-input" id="ver-filter" list="ver-datalist" placeholder="e.g. 0.14.29688">
-          <button class="btn-sm" onclick="selectVersion(false)" title="Select all devices running this version">Matching</button>
-          <button class="btn-sm" onclick="selectVersion(true)"  title="Select all devices NOT on this version">Others</button>
+          <button class="btn-sm" onclick="selectVersion(false)" title="Select devices on this version">Matching</button>
+          <button class="btn-sm" onclick="selectVersion(true)"  title="Select devices NOT on this version">Others</button>
         </div>
       </div>
-
       <div id="upgrade-bar"></div>
-
-      <div class="device-count" id="device-count"></div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:36px"><input type="checkbox" id="sel-all-check" onchange="toggleAll(this.checked)"></th>
-              <th class="sortable" data-col="name"      onclick="sortBy('name')">Name <span class="sort-arrow">↑</span></th>
-              <th class="sortable" data-col="type"      onclick="sortBy('type')">Type <span class="sort-arrow"></span></th>
-              <th class="sortable" data-col="model"     onclick="sortBy('model')">Model <span class="sort-arrow"></span></th>
-              <th class="sortable" data-col="site_name" onclick="sortBy('site_name')">Site <span class="sort-arrow"></span></th>
-              <th class="sortable" data-col="status"    onclick="sortBy('status')">Status <span class="sort-arrow"></span></th>
-              <th class="sortable" data-col="ip"        onclick="sortBy('ip')">IP Address <span class="sort-arrow"></span></th>
-              <th class="sortable" data-col="version"   onclick="sortBy('version')">Firmware <span class="sort-arrow"></span></th>
-              <th class="sortable" data-col="uptime"    onclick="sortBy('uptime')">Uptime <span class="sort-arrow"></span></th>
-            </tr>
-          </thead>
-          <tbody id="device-tbody"></tbody>
-        </table>
-      </div>`;
+      ${buildCards()}`;
 
     loadEl.style.display = "none";
     contEl.style.display = "block";
-    updateSortHeaders();
-    renderTable();
+
+    TYPE_DEFS.forEach(t => renderTypeTable(t.key));
 
   } catch (err) {
     loadEl.style.display = "none";
@@ -606,16 +666,17 @@ async function load() {
   }
 }
 
-function setType(t, btn) {
-  typeFilter = t;
-  document.querySelectorAll(".type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === t));
-  selectedIds.clear();
-  renderTable();
-}
-
 function onSearch(val) {
   searchTerm = val;
-  renderTable();
+  // Auto-expand cards that have matching results
+  if (val) {
+    TYPE_DEFS.forEach(({ key }) => {
+      const matches = devicesOfType(key);
+      const card = document.getElementById(`card-${key}`);
+      if (card && matches.length) card.classList.add("expanded");
+    });
+  }
+  renderAllTables();
 }
 
 load();
