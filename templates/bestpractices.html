@@ -767,18 +767,18 @@ function buildRfTemplateSub(rf) {
   } else {
     bodyHtml = `
       <div class="info-card" style="margin-bottom:14px">
-        <h4>Golden Config RF Template</h4>
-        <p>No RF template named <strong style="color:var(--text)">"golden config"</strong> was found
+        <h4>Suggested Settings RF Template</h4>
+        <p>No RF template named <strong style="color:var(--text)">"Suggested Settings"</strong> was found
           for this org. Click below to create it with the standard recommended settings.</p>
       </div>
       ${SETTINGS_HTML}
       <div style="margin-top:16px;display:flex;align-items:center;gap:12px">
-        <button class="btn-apply-all" id="create-rf-btn">Create Golden Config</button>
+        <button class="btn-apply-all" id="create-rf-btn">Create Suggested Settings</button>
         <div id="create-rf-result" style="font-size:13px;display:none"></div>
       </div>`;
   }
 
-  const sub = makeSubCard("sub-rf", "📻", "RF Template — Golden Config",
+  const sub = makeSubCard("sub-rf", "📻", "RF Template — Suggested Settings",
     "Standard RF settings for 2.4 / 5 / 6 GHz · United States",
     status,
     exists ? "Exists" : "Missing",
@@ -815,7 +815,7 @@ function buildRfTemplateSub(rf) {
         refreshParentCard("wireless");
       } catch (e) {
         btn.disabled    = false;
-        btn.textContent = "Create Golden Config";
+        btn.textContent = "Create Suggested Settings";
         res.style.display = "block";
         res.style.color   = "var(--red)";
         res.textContent   = `Error: ${e.message}`;
