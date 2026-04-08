@@ -1798,15 +1798,16 @@ def api_datarates(org_id):
     if not org_allowed(org_id):
         return jsonify({"error": "Access denied"}), 403
 
-    # Collect (wlan_id, scope, scope_id, site_name) tuples from the list endpoints
+    # Only fetch org-level WLANs — site-level WLANs without a template are flagged, not fixed
     stubs = []
     try:
         for w in (mist_get(sid, f"/orgs/{org_id}/wlans") or []):
             if w.get("id"):
-                stubs.append((w["id"], "org", org_id, ""))
+                stubs.append((w["id"], w.get("template_id") or ""))
     except Exception as e:
         _log.warning("org wlan list failed: %s", e)
 
+    # Also collect site-level WLANs (for display only — no fix applied)
     try:
         sites = mist_get(sid, f"/orgs/{org_id}/sites") or []
     except Exception:
@@ -1815,41 +1816,39 @@ def api_datarates(org_id):
     def _site_stubs(site):
         try:
             wlans = mist_get(sid, f"/sites/{site['id']}/wlans") or []
-            return [(w["id"], "site", site["id"], site.get("name", ""))
-                    for w in wlans if w.get("id")]
+            return [(w["id"], "", site["id"], site.get("name", ""))
+                    for w in wlans if w.get("id") and not w.get("template_id")]
         except Exception:
             return []
 
+    site_stubs = []
     with ThreadPoolExecutor(max_workers=8) as ex:
         for result in as_completed([ex.submit(_site_stubs, s) for s in sites]):
-            stubs.extend(result.result())
+            site_stubs.extend(result.result())
 
-    # Fetch each WLAN individually to get full rateset
-    def _fetch_wlan(stub):
-        wlan_id, scope, scope_id, site_name = stub
+    # Fetch each org WLAN individually to get full rateset
+    def _fetch_wlan(wlan_id, template_id):
         try:
-            if scope == "site":
-                w = mist_get(sid, f"/sites/{scope_id}/wlans/{wlan_id}")
-            else:
-                w = mist_get(sid, f"/orgs/{org_id}/wlans/{wlan_id}")
+            w = mist_get(sid, f"/orgs/{org_id}/wlans/{wlan_id}")
             rateset = w.get("rateset", {})
-            # Get the template for each active band
+            bands   = w.get("bands", [])
             band_24 = rateset.get("24", {}).get("template", "compatible")
             band_5  = rateset.get("5",  {}).get("template", "compatible")
             band_6  = rateset.get("6",  {}).get("template", "compatible")
-            bands   = w.get("bands", [])
+            _log.info("DATARATES_FETCH wlan=%s ssid=%s rateset=%s", wlan_id, w.get("ssid"), rateset)
             return {
-                "id":        wlan_id,
-                "ssid":      w.get("ssid", "Unnamed"),
-                "enabled":   w.get("enabled", True),
-                "scope":     scope,
-                "scope_id":  scope_id,
-                "site_name": site_name,
-                "band_24":   band_24,
-                "band_5":    band_5,
-                "band_6":    band_6,
-                "bands":     bands,
-                # high density = no legacy on every active band
+                "id":          wlan_id,
+                "ssid":        w.get("ssid", "Unnamed"),
+                "enabled":     w.get("enabled", True),
+                "scope":       "org",
+                "scope_id":    org_id,
+                "site_name":   "",
+                "template_id": template_id,
+                "in_template": bool(template_id),
+                "band_24":     band_24,
+                "band_5":      band_5,
+                "band_6":      band_6,
+                "bands":       bands,
                 "high_density": all(
                     rateset.get(b, {}).get("template", "compatible") == "high-density"
                     for b in bands if b in rateset
@@ -1860,8 +1859,32 @@ def api_datarates(org_id):
             return None
 
     with ThreadPoolExecutor(max_workers=12) as ex:
-        futures = [ex.submit(_fetch_wlan, s) for s in stubs]
+        futures = [ex.submit(_fetch_wlan, wlan_id, tmpl_id) for wlan_id, tmpl_id in stubs]
         wlans = [r.result() for r in as_completed(futures) if r.result()]
+
+    # Add site-only WLANs (no template) as display-only entries
+    for wlan_id, _, site_id, site_name in site_stubs:
+        try:
+            w = mist_get(sid, f"/sites/{site_id}/wlans/{wlan_id}")
+            rateset = w.get("rateset", {})
+            bands   = w.get("bands", [])
+            wlans.append({
+                "id":          wlan_id,
+                "ssid":        w.get("ssid", "Unnamed"),
+                "enabled":     w.get("enabled", True),
+                "scope":       "site",
+                "scope_id":    site_id,
+                "site_name":   site_name,
+                "template_id": "",
+                "in_template": False,
+                "band_24":     rateset.get("24", {}).get("template", "compatible"),
+                "band_5":      rateset.get("5",  {}).get("template", "compatible"),
+                "band_6":      rateset.get("6",  {}).get("template", "compatible"),
+                "bands":       bands,
+                "high_density": False,
+            })
+        except Exception:
+            pass
 
     seen = set()
     unique = []
@@ -1884,23 +1907,16 @@ def api_datarates_apply(org_id, wlan_id):
     if not org_allowed(org_id):
         return jsonify({"error": "Access denied"}), 403
 
-    data     = request.json or {}
-    scope    = data.get("scope", "org")
-    scope_id = data.get("scope_id", org_id)
+    data = request.json or {}
+    # Only allow changes to org-level template WLANs
+    if data.get("scope") == "site":
+        return jsonify({"error": "Site-level WLANs must be managed via a WLAN template"}), 400
 
-    if scope not in ("org", "site"):
-        return jsonify({"error": "Invalid scope"}), 400
-    if scope == "site" and not valid_uuid(scope_id):
-        return jsonify({"error": "Invalid scope_id"}), 400
-
-    if scope == "site":
-        path = f"/sites/{scope_id}/wlans/{wlan_id}"
-    else:
-        path = f"/orgs/{org_id}/wlans/{wlan_id}"
+    path = f"/orgs/{org_id}/wlans/{wlan_id}"
 
     try:
-        wlan   = mist_get(sid, path)
-        bands  = wlan.get("bands", ["24", "5"])
+        wlan    = mist_get(sid, path)
+        bands   = wlan.get("bands", ["24", "5"])
         rateset = wlan.get("rateset", {})
 
         # Build updated rateset — set high-density on all active bands
@@ -1914,8 +1930,8 @@ def api_datarates_apply(org_id, wlan_id):
         wlan["rateset"] = new_rateset
 
         actor = _sessions[sid].get("email", "unknown")
-        _log.info("DATARATES scope=%s scope_id=%s wlan=%s ssid=%s new_rateset=%s actor=%s ip=%s",
-                  scope, scope_id, wlan_id, wlan.get("ssid", ""), new_rateset, actor, request.remote_addr)
+        _log.info("DATARATES wlan=%s ssid=%s new_rateset=%s actor=%s ip=%s",
+                  wlan_id, wlan.get("ssid", ""), new_rateset, actor, request.remote_addr)
 
         r = mist_put(sid, path, wlan)
         _log.info("DATARATES PUT status=%s body=%s", r.status_code, r.text[:500])
