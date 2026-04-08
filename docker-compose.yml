@@ -1,16 +1,15 @@
 services:
-  dpc-to-nac:
+  mist-hackathon:
     build: .
-    # Single worker + threads keeps the in-memory session dict coherent.
-    # If you move to a proper session store (Redis etc.) you can raise -w.
-    command: gunicorn -b 0.0.0.0:5001 -w 1 --threads 4 dpc_to_nac:app
     ports:
       - "5001:5001"
     volumes:
-      - dpc-secrets:/app/secrets
+      # Persists the Flask secret key across container restarts so
+      # existing browser sessions stay valid after a redeploy.
+      - mist-secrets:/app/secrets
     environment:
       - FLASK_SECRET_DIR=/app/secrets
     restart: unless-stopped
 
 volumes:
-  dpc-secrets:
+  mist-secrets:
