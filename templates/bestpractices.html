@@ -74,48 +74,45 @@
       border: 1px solid rgba(239,68,68,0.3); border-radius: 10px;
       color: #f87171; padding: 14px 18px; margin-bottom: 24px; font-size: 13px;
     }
-    #cards { display: none; flex-direction: column; gap: 16px; }
+    #cards { display: none; flex-direction: column; gap: 20px; }
 
-    /* ── Status card ── */
+    /* ── Parent card ── */
     .bp-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      overflow: hidden;
-      transition: border-color 0.2s;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
     }
-    .bp-card.status-green { border-left: 4px solid var(--green); }
+    .bp-card.status-green  { border-left: 4px solid var(--green);  }
     .bp-card.status-yellow { border-left: 4px solid var(--yellow); }
-    .bp-card.status-red { border-left: 4px solid var(--red); }
+    .bp-card.status-red    { border-left: 4px solid var(--red);    }
+    .bp-card.status-muted  { border-left: 4px solid var(--muted);  }
 
     .bp-card-header {
       display: flex; align-items: center; gap: 16px;
-      padding: 20px 24px; cursor: pointer;
-      user-select: none;
+      padding: 20px 24px; cursor: pointer; user-select: none;
       transition: background 0.15s;
     }
     .bp-card-header:hover { background: var(--surface2); }
 
     .bp-card-icon {
-      width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center; font-size: 18px;
+      width: 44px; height: 44px; border-radius: 11px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
     }
     .bp-card.status-green  .bp-card-icon { background: rgba(34,197,94,0.12);  }
     .bp-card.status-yellow .bp-card-icon { background: rgba(245,158,11,0.12); }
     .bp-card.status-red    .bp-card-icon { background: rgba(239,68,68,0.12);  }
+    .bp-card.status-muted  .bp-card-icon { background: rgba(107,114,128,0.12);}
 
     .bp-card-info { flex: 1; min-width: 0; }
-    .bp-card-title { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+    .bp-card-title { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
     .bp-card-desc  { font-size: 13px; color: var(--muted); }
 
     .bp-card-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 
-    .bp-score {
-      font-size: 22px; font-weight: 700; line-height: 1;
-    }
+    .bp-score { font-size: 24px; font-weight: 700; line-height: 1; }
     .bp-card.status-green  .bp-score { color: var(--green);  }
     .bp-card.status-yellow .bp-score { color: var(--yellow); }
     .bp-card.status-red    .bp-score { color: var(--red);    }
+    .bp-card.status-muted  .bp-score { color: var(--muted);  }
 
     .bp-score-label { font-size: 11px; color: var(--muted); margin-top: 2px; text-align: right; }
 
@@ -126,20 +123,65 @@
     .bp-badge.green  { background: rgba(34,197,94,0.12);  color: var(--green);  border: 1px solid rgba(34,197,94,0.25); }
     .bp-badge.yellow { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
     .bp-badge.red    { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+    .bp-badge.muted  { background: rgba(107,114,128,0.1); color: var(--muted);  border: 1px solid rgba(107,114,128,0.2); }
 
-    .bp-chevron {
-      color: var(--muted); font-size: 12px;
-      transition: transform 0.2s;
-    }
+    .bp-chevron { color: var(--muted); font-size: 12px; transition: transform 0.2s; }
     .bp-card.expanded .bp-chevron { transform: rotate(180deg); }
 
-    .bp-card-body {
-      display: none; border-top: 1px solid var(--border);
-      padding: 24px;
-    }
+    .bp-card-body { display: none; border-top: 1px solid var(--border); padding: 16px 20px; }
     .bp-card.expanded .bp-card-body { display: block; }
 
-    /* ── Apply All button ── */
+    /* ── Sub-cards ── */
+    .bp-subcards { display: flex; flex-direction: column; gap: 10px; }
+
+    .bp-sub {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .bp-sub.status-green  { border-left: 3px solid var(--green);  }
+    .bp-sub.status-yellow { border-left: 3px solid var(--yellow); }
+    .bp-sub.status-red    { border-left: 3px solid var(--red);    }
+    .bp-sub.status-muted  { border-left: 3px solid var(--muted);  }
+
+    .bp-sub-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px; cursor: pointer; user-select: none;
+      transition: background 0.15s;
+    }
+    .bp-sub-header:hover { background: var(--surface2); }
+
+    .bp-sub-icon {
+      width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 15px;
+    }
+    .bp-sub.status-green  .bp-sub-icon { background: rgba(34,197,94,0.1);  }
+    .bp-sub.status-yellow .bp-sub-icon { background: rgba(245,158,11,0.1); }
+    .bp-sub.status-red    .bp-sub-icon { background: rgba(239,68,68,0.1);  }
+    .bp-sub.status-muted  .bp-sub-icon { background: rgba(107,114,128,0.1);}
+
+    .bp-sub-info { flex: 1; min-width: 0; }
+    .bp-sub-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .bp-sub-desc  { font-size: 12px; color: var(--muted); }
+
+    .bp-sub-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .bp-sub-score { font-size: 18px; font-weight: 700; line-height: 1; }
+    .bp-sub.status-green  .bp-sub-score { color: var(--green);  }
+    .bp-sub.status-yellow .bp-sub-score { color: var(--yellow); }
+    .bp-sub.status-red    .bp-sub-score { color: var(--red);    }
+    .bp-sub.status-muted  .bp-sub-score { color: var(--muted);  }
+    .bp-sub-score-label { font-size: 10px; color: var(--muted); margin-top: 2px; text-align: right; }
+
+    .bp-sub-chevron { color: var(--muted); font-size: 11px; transition: transform 0.2s; }
+    .bp-sub.expanded .bp-sub-chevron { transform: rotate(180deg); }
+
+    .bp-sub-body { display: none; border-top: 1px solid var(--border); padding: 16px 18px; }
+    .bp-sub.expanded .bp-sub-body { display: block; }
+
+    .bp-no-checks {
+      padding: 24px; text-align: center; color: var(--muted); font-size: 13px;
+    }
+
+    /* ── Buttons ── */
     .btn-apply-all {
       font-size: 13px; font-weight: 600; padding: 8px 18px;
       background: var(--purple); color: #fff; border: none;
@@ -159,69 +201,57 @@
       letter-spacing: 0.08em; color: var(--muted);
     }
     .wlan-table-wrap {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 12px; overflow: hidden;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
     }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     thead th {
-      text-align: left; padding: 12px 16px;
+      text-align: left; padding: 10px 14px;
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
       color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500;
-      white-space: nowrap;
+      white-space: nowrap; background: var(--surface2);
     }
     thead th.filter-col { text-align: center; }
     tbody tr { transition: background 0.1s; }
     tbody tr:hover { background: rgba(255,255,255,0.03); }
-    tbody td {
-      padding: 13px 16px; border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-    }
+    tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     tbody tr:last-child td { border-bottom: none; }
     td.filter-col { text-align: center; }
-
     .ssid-name { font-weight: 500; }
     .ssid-disabled { color: var(--muted); font-style: italic; }
 
-    /* ── Toggle switch ── */
-    .toggle-wrap {
-      display: inline-flex; align-items: center; justify-content: center;
-      position: relative;
-    }
+    /* ── Toggle ── */
+    .toggle-wrap { display: inline-flex; align-items: center; justify-content: center; position: relative; }
     .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
     .toggle-track {
-      width: 40px; height: 22px; border-radius: 11px;
+      width: 38px; height: 21px; border-radius: 11px;
       background: var(--border); cursor: pointer;
-      transition: background 0.2s; position: relative;
-      display: block; flex-shrink: 0;
+      transition: background 0.2s; position: relative; display: block; flex-shrink: 0;
     }
     .toggle-track::after {
-      content: ""; position: absolute;
-      width: 16px; height: 16px; border-radius: 50%;
+      content: ""; position: absolute; width: 15px; height: 15px; border-radius: 50%;
       background: #fff; top: 3px; left: 3px;
-      transition: transform 0.2s, box-shadow 0.2s;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
     .toggle-input:checked + .toggle-track { background: var(--green); }
-    .toggle-input:checked + .toggle-track::after { transform: translateX(18px); }
+    .toggle-input:checked + .toggle-track::after { transform: translateX(17px); }
     .toggle-input:disabled + .toggle-track { opacity: 0.4; cursor: not-allowed; }
-
     .toggle-spinner {
-      width: 20px; height: 20px; border: 2px solid var(--border);
+      width: 18px; height: 18px; border: 2px solid var(--border);
       border-top-color: var(--purple); border-radius: 50%;
       animation: spin 0.7s linear infinite; display: none;
     }
+    .apply-result { font-size: 12px; margin-top: 4px; display: none; }
+    .apply-result.ok  { color: var(--green); }
+    .apply-result.err { color: var(--red); }
 
     /* ── Tooltip ── */
-    .th-tooltip {
-      position: relative; cursor: help;
-      display: inline-flex; align-items: center; gap: 4px;
-    }
+    .th-tooltip { position: relative; cursor: help; display: inline-flex; align-items: center; gap: 4px; }
     .th-tooltip .tip-icon {
       width: 14px; height: 14px; border-radius: 50%;
       background: var(--surface2); border: 1px solid var(--border);
       color: var(--muted); font-size: 9px; font-weight: 700;
-      display: inline-flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
     .th-tooltip .tip-box {
       display: none; position: absolute; top: calc(100% + 8px);
@@ -229,57 +259,41 @@
       background: #0c0e17; border: 1px solid var(--border);
       border-radius: 8px; padding: 10px 14px;
       font-size: 12px; color: var(--text); line-height: 1.5;
-      width: 280px; z-index: 50; text-transform: none; letter-spacing: 0;
-      font-weight: 400; white-space: normal;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      width: 260px; z-index: 50; text-transform: none; letter-spacing: 0;
+      font-weight: 400; white-space: normal; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     }
     .th-tooltip .tip-box::before {
-      content: ""; position: absolute; bottom: 100%; left: 50%;
-      transform: translateX(-50%);
+      content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
       border: 6px solid transparent; border-bottom-color: var(--border);
     }
     .th-tooltip:hover .tip-box { display: block; }
 
     /* ── Status pill ── */
-    .status-pill {
-      font-size: 11px; font-weight: 600; padding: 3px 10px;
-      border-radius: 99px; white-space: nowrap;
-    }
+    .status-pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
     .status-ok   { background: rgba(34,197,94,0.12);  color: var(--green); }
     .status-warn { background: rgba(245,158,11,0.12); color: var(--yellow); }
     .status-bad  { background: rgba(239,68,68,0.12);  color: var(--red); }
 
-    .apply-result {
-      font-size: 12px; margin-top: 4px; display: none;
+    /* ── Info card (DPC / AA explanations) ── */
+    .info-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px; margin-top: 12px;
     }
-    .apply-result.ok  { color: var(--green); }
-    .apply-result.err { color: var(--red); }
-
-    /* ── DPC content ── */
-    .dpc-info-card {
-      margin-top: 16px; background: var(--bg);
-      border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px;
-    }
-    .dpc-info-card h4 {
-      font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text);
-    }
-    .dpc-info-card p {
-      font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 10px;
-    }
-    .dpc-info-card p:last-child { margin-bottom: 0; }
-    .dpc-info-card .highlight { color: #a78bfa; font-weight: 500; }
-    .dpc-nac-note {
-      margin-top: 16px; padding: 12px 16px;
+    .info-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+    .info-card p  { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 8px; }
+    .info-card p:last-child { margin-bottom: 0; }
+    .info-card .hl { color: #a78bfa; font-weight: 500; }
+    .nac-note {
+      margin-top: 12px; padding: 12px 16px;
       background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.2);
       border-radius: 8px; font-size: 13px; line-height: 1.6; color: var(--text);
     }
-    .dpc-nac-note a { color: #a78bfa; text-decoration: none; font-weight: 500; }
-    .dpc-nac-note a:hover { text-decoration: underline; }
-    .dpc-templates { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-    .dpc-tmpl-chip {
+    .nac-note a { color: #a78bfa; text-decoration: none; font-weight: 500; }
+    .nac-note a:hover { text-decoration: underline; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip-green {
       font-size: 11px; padding: 3px 10px; border-radius: 99px;
-      background: rgba(34,197,94,0.1); color: var(--green);
-      border: 1px solid rgba(34,197,94,0.25);
+      background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.25);
     }
   </style>
 </head>
@@ -307,12 +321,9 @@
 
 <main>
   <div class="page-title">Best Practices</div>
-  <div class="page-sub">Configuration health checks for this org &nbsp;<code style="font-size:11px;color:#a78bfa">{{ org_id }}</code></div>
+  <div class="page-sub">Configuration health checks — <code style="font-size:11px;color:#a78bfa">{{ org_id }}</code></div>
 
-  <div id="loading">
-    <div class="spinner"></div>
-    <span>Loading configuration checks…</span>
-  </div>
+  <div id="loading"><div class="spinner"></div><span>Loading checks…</span></div>
   <div id="error-banner"></div>
   <div id="cards"></div>
 </main>
@@ -325,32 +336,26 @@ let filterDefs = [];
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
-function cardStatus(enabled, total) {
-  if (total === 0)  return "red";
-  const pct = enabled / total;
-  if (pct >= 1)    return "green";
-  if (pct >= 0.5)  return "yellow";
-  return "red";
+function worstStatus(statuses) {
+  if (!statuses.length) return "muted";
+  if (statuses.includes("red"))    return "red";
+  if (statuses.includes("yellow")) return "yellow";
+  if (statuses.includes("green"))  return "green";
+  return "muted";
 }
 
-function badgeClass(status) {
-  return status; // green / yellow / red
+function pctStatus(enabled, total) {
+  if (total === 0)        return "muted";
+  if (enabled >= total)   return "green";
+  if (enabled / total >= 0.5) return "yellow";
+  return "red";
 }
 
 function badgeLabel(status) {
   if (status === "green")  return "✓ Healthy";
   if (status === "yellow") return "⚠ Needs Attention";
-  return "✗ Action Required";
-}
-
-function cardIcon(status) {
-  if (status === "green")  return "✓";
-  if (status === "yellow") return "⚠";
-  return "✗";
-}
-
-function wlanScore(w) {
-  return filterDefs.filter(f => w[f.field]).length;
+  if (status === "red")    return "✗ Action Required";
+  return "No Checks";
 }
 
 function statusPill(score, total) {
@@ -359,14 +364,103 @@ function statusPill(score, total) {
   return `<span class="status-pill status-warn">${total - score} missing</span>`;
 }
 
-// ── Toggle apply ───────────────────────────────────────────────────────────────
+// Only count non-standalone filters for the WLAN Filters sub-card score
+function tableFilters() { return filterDefs.filter(f => !f.standalone); }
+function wlanScore(w)   { return tableFilters().filter(f => w[f.field]).length; }
+
+// ── Build sub-card element ─────────────────────────────────────────────────────
+
+function makeSubCard(id, icon, title, desc, status, scoreText, scoreLabel, bodyHtml) {
+  const el = document.createElement("div");
+  el.className = `bp-sub status-${status}`;
+  el.id = id;
+  el.dataset.status = status;
+  el.innerHTML = `
+    <div class="bp-sub-header">
+      <div class="bp-sub-icon">${icon}</div>
+      <div class="bp-sub-info">
+        <div class="bp-sub-title">${title}</div>
+        <div class="bp-sub-desc">${desc}</div>
+      </div>
+      <div class="bp-sub-right">
+        <div>
+          <div class="bp-sub-score">${scoreText}</div>
+          <div class="bp-sub-score-label">${scoreLabel}</div>
+        </div>
+        <span class="bp-badge ${status}">${badgeLabel(status)}</span>
+        <span class="bp-sub-chevron">▼</span>
+      </div>
+    </div>
+    <div class="bp-sub-body">${bodyHtml}</div>`;
+  el.querySelector(".bp-sub-header").addEventListener("click", () => el.classList.toggle("expanded"));
+  return el;
+}
+
+// ── Build parent card ──────────────────────────────────────────────────────────
+
+function makeParentCard(id, icon, title, desc, subcards) {
+  const statuses = subcards.map(s => s.dataset.status || "muted");
+  const status   = worstStatus(statuses);
+  const passing  = subcards.filter(s => s.dataset.status === "green").length;
+  const total    = subcards.length;
+
+  const el = document.createElement("div");
+  el.className = `bp-card status-${status}`;
+  el.id = `parent-${id}`;
+  el.innerHTML = `
+    <div class="bp-card-header">
+      <div class="bp-card-icon">${icon}</div>
+      <div class="bp-card-info">
+        <div class="bp-card-title">${title}</div>
+        <div class="bp-card-desc">${desc}</div>
+      </div>
+      <div class="bp-card-right">
+        <div>
+          <div class="bp-score">${total ? `${passing}/${total}` : "—"}</div>
+          <div class="bp-score-label">${total ? "checks passing" : "no checks"}</div>
+        </div>
+        <span class="bp-badge ${status}">${badgeLabel(status)}</span>
+        <span class="bp-chevron">▼</span>
+      </div>
+    </div>
+    <div class="bp-card-body">
+      <div class="bp-subcards" id="subcards-${id}"></div>
+    </div>`;
+
+  el.querySelector(".bp-card-header").addEventListener("click", () => el.classList.toggle("expanded"));
+
+  const container = el.querySelector(`#subcards-${id}`);
+  if (subcards.length) {
+    subcards.forEach(sc => container.appendChild(sc));
+  } else {
+    container.innerHTML = `<div class="bp-no-checks">No checks configured for this category yet.</div>`;
+  }
+  return el;
+}
+
+function refreshParentCard(parentId) {
+  const parent = document.getElementById(`parent-${parentId}`);
+  if (!parent) return;
+  const subcards = [...parent.querySelectorAll(".bp-sub")];
+  const statuses = subcards.map(s => s.dataset.status || "muted");
+  const status   = worstStatus(statuses);
+  const passing  = subcards.filter(s => s.dataset.status === "green").length;
+  const total    = subcards.length;
+
+  parent.className = `bp-card status-${status}${parent.classList.contains("expanded") ? " expanded" : ""}`;
+  parent.querySelector(".bp-score").textContent      = total ? `${passing}/${total}` : "—";
+  parent.querySelector(".bp-score-label").textContent = total ? "checks passing" : "no checks";
+  const badge = parent.querySelector(":scope > .bp-card-header .bp-badge");
+  if (badge) { badge.className = `bp-badge ${status}`; badge.textContent = badgeLabel(status); }
+}
+
+// ── Apply filter (WLAN toggle) ─────────────────────────────────────────────────
 
 async function applyFilter(wlanId, field, toggleEl, spinnerEl, resultEl) {
   toggleEl.disabled = true;
   spinnerEl.style.display = "block";
   resultEl.style.display  = "none";
-
-  const wlanEntry = wlanData.find(entry => entry.id === wlanId);
+  const wlanEntry = wlanData.find(e => e.id === wlanId);
   try {
     const res  = await fetch(`/api/bestpractices/${ORG_ID}/${wlanId}`, {
       method:  "POST",
@@ -374,18 +468,15 @@ async function applyFilter(wlanId, field, toggleEl, spinnerEl, resultEl) {
       body:    JSON.stringify({field, scope: wlanEntry?.scope || "org", scope_id: wlanEntry?.scope_id || ORG_ID}),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || data.detail || `HTTP ${res.status}`);
-
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     toggleEl.checked  = true;
     toggleEl.disabled = false;
     resultEl.className     = "apply-result ok";
     resultEl.textContent   = data.status === "already_enabled" ? "Already enabled" : "Applied ✓";
     resultEl.style.display = "block";
-
     if (wlanEntry) wlanEntry[field] = true;
-    refreshWlanCard();
+    refreshWlanSubCard();
     setTimeout(() => { resultEl.style.display = "none"; }, 3000);
-
   } catch (e) {
     toggleEl.checked  = false;
     toggleEl.disabled = false;
@@ -397,472 +488,440 @@ async function applyFilter(wlanId, field, toggleEl, spinnerEl, resultEl) {
   }
 }
 
-// ── WLAN card refresh (update header without re-rendering body) ────────────────
+function refreshWlanSubCard() {
+  const filters   = tableFilters();
+  const total     = wlanData.length;
+  const enabled   = wlanData.reduce((a, w) => a + wlanScore(w), 0);
+  const possible  = total * filters.length;
+  const compliant = wlanData.filter(w => wlanScore(w) === filters.length).length;
+  const status    = pctStatus(enabled, possible);
+  const missing   = possible - enabled;
 
-function refreshWlanCard() {
-  const total    = wlanData.length;
-  const enabled  = wlanData.reduce((acc, w) => acc + wlanScore(w), 0);
-  const possible = total * filterDefs.length;
-  const compliant = wlanData.filter(w => wlanScore(w) === filterDefs.length).length;
-  const status   = cardStatus(enabled, possible);
+  const sub = document.getElementById("sub-wlan");
+  if (!sub) return;
+  sub.className     = `bp-sub status-${status}${sub.classList.contains("expanded") ? " expanded" : ""}`;
+  sub.dataset.status = status;
+  sub.querySelector(".bp-sub-score").textContent      = `${compliant}/${total}`;
+  sub.querySelector(".bp-sub-score-label").textContent = "WLANs compliant";
+  const badge = sub.querySelector(".bp-badge");
+  if (badge) { badge.className = `bp-badge ${status}`; badge.textContent = badgeLabel(status); }
 
-  const card = document.getElementById("card-wlan");
-  if (!card) return;
-  card.className = `bp-card expanded status-${status}`;
-  card.querySelector(".bp-score").textContent = `${compliant}/${total}`;
-  card.querySelector(".bp-score-label").textContent = "WLANs compliant";
-  const badge = card.querySelector(".bp-badge");
-  badge.className = `bp-badge ${badgeClass(status)}`;
-  badge.textContent = badgeLabel(status);
-  card.querySelector(".bp-card-icon").textContent = cardIcon(status);
-
-  // Update row status pills
+  // Update row pills
   wlanData.forEach(w => {
     const td = document.getElementById(`td-status-${w.id}`);
     if (td) td.innerHTML = statusPill(wlanScore(w), filterDefs.length);
   });
 
   // Update apply-all button
-  const missingCount = wlanData.reduce((acc, w) =>
-    acc + filterDefs.filter(f => !w[f.field]).length, 0);
   const btn = document.getElementById("apply-all-btn");
-  if (btn) {
-    btn.textContent = missingCount > 0 ? `Apply All Missing (${missingCount})` : "All Applied ✓";
-    btn.disabled = missingCount === 0;
-  }
+  if (btn) { btn.textContent = missing > 0 ? `Apply All Missing (${missing})` : "All Applied ✓"; btn.disabled = !missing; }
+
+  refreshParentCard("wireless");
 }
 
-// ── Render WLAN card ───────────────────────────────────────────────────────────
+// ── Build Banned Clients sub-card ─────────────────────────────────────────────
 
-function renderWlanCard() {
-  const total    = wlanData.length;
-  const enabled  = wlanData.reduce((acc, w) => acc + wlanScore(w), 0);
-  const possible = total * filterDefs.length;
-  const compliant = wlanData.filter(w => wlanScore(w) === filterDefs.length).length;
-  const status   = cardStatus(enabled, possible);
-  const missing  = wlanData.reduce((acc, w) =>
-    acc + filterDefs.filter(f => !w[f.field]).length, 0);
+function buildBannedClientsSub() {
+  const field     = "block_blacklisted_clients";
+  const total     = wlanData.length;
+  const enabled   = wlanData.filter(w => w[field]).length;
+  const status    = pctStatus(enabled, total);
+  const missing   = total - enabled;
 
-  // Table
-  let tableHtml = "";
+  let tableHtml;
   if (total === 0) {
-    tableHtml = `<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
-      No WLANs found. Ensure your API token has read access to org and site WLANs.
-    </div>`;
+    tableHtml = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">
+      No WLANs found.</div>`;
+  } else {
+    let rows = wlanData.map(w => {
+      const nameCls  = w.enabled ? "ssid-name" : "ssid-name ssid-disabled";
+      const scopeLbl = w.scope === "site"
+        ? `<span style="font-size:11px;color:var(--muted)">${w.site_name || w.scope_id}</span>`
+        : `<span style="font-size:11px;color:var(--muted)">Org template</span>`;
+      return `<tr>
+        <td class="${nameCls}">${w.ssid}${!w.enabled ? " (disabled)" : ""}</td>
+        <td>${scopeLbl}</td>
+        <td class="filter-col">
+          <label class="toggle-wrap">
+            <input class="toggle-input" type="checkbox" id="ban-tog-${w.id}" ${w[field] ? "checked" : ""}
+                   data-wlan="${w.id}" data-field="${field}">
+            <span class="toggle-track"></span>
+          </label>
+          <div class="toggle-spinner" id="ban-spin-${w.id}"></div>
+          <div class="apply-result"    id="ban-res-${w.id}"></div>
+        </td>
+      </tr>`;
+    }).join("");
+
+    tableHtml = `<div class="wlan-table-wrap"><table>
+      <thead><tr>
+        <th>SSID</th><th>Scope</th>
+        <th class="filter-col">Block Banned Clients</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  const applyBtn = `<button class="btn-apply-all" id="ban-apply-all-btn" ${!missing ? "disabled" : ""}>
+    ${missing ? `Apply All Missing (${missing})` : "All Applied ✓"}</button>`;
+
+  const bodyHtml = `
+    <div class="wlan-table-header">
+      <div class="wlan-table-title">${total} WLAN${total !== 1 ? "s" : ""}</div>
+      ${applyBtn}
+    </div>
+    ${tableHtml}`;
+
+  const sub = makeSubCard("sub-banned-clients", "🚫", "Prevent Banned Clients",
+    "Block MAC-blacklisted clients from associating to any SSID",
+    status, `${enabled}/${total}`, "WLANs enforcing", bodyHtml);
+
+  // Wire toggles
+  sub.querySelectorAll(".toggle-input").forEach(inp => {
+    inp.addEventListener("change", async e => {
+      if (!e.target.checked) { e.target.checked = true; return; }
+      const wlanId = e.target.dataset.wlan;
+      const fld    = e.target.dataset.field;
+      const spin   = document.getElementById(`ban-spin-${wlanId}`);
+      const res    = document.getElementById(`ban-res-${wlanId}`);
+      await applyFilter(wlanId, fld, e.target, spin, res);
+      // Refresh this sub-card's header after apply
+      const wlanEntry = wlanData.find(x => x.id === wlanId);
+      if (wlanEntry) wlanEntry[field] = true;
+      const newEnabled = wlanData.filter(w => w[field]).length;
+      const newMissing = total - newEnabled;
+      const newStatus  = pctStatus(newEnabled, total);
+      const sc = document.getElementById("sub-banned-clients");
+      if (sc) {
+        sc.className = `bp-sub status-${newStatus}${sc.classList.contains("expanded") ? " expanded" : ""}`;
+        sc.dataset.status = newStatus;
+        sc.querySelector(".bp-sub-score").textContent = `${newEnabled}/${total}`;
+        const badge = sc.querySelector(".bp-badge");
+        if (badge) { badge.className = `bp-badge ${newStatus}`; badge.textContent = badgeLabel(newStatus); }
+        const btn = document.getElementById("ban-apply-all-btn");
+        if (btn) { btn.textContent = newMissing > 0 ? `Apply All Missing (${newMissing})` : "All Applied ✓"; btn.disabled = !newMissing; }
+      }
+      refreshParentCard("wireless");
+    });
+  });
+
+  // Apply All
+  const btn = sub.querySelector("#ban-apply-all-btn");
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true; btn.textContent = "Applying…";
+      const tasks = wlanData
+        .filter(w => !w[field])
+        .map(w => {
+          const tog  = document.getElementById(`ban-tog-${w.id}`);
+          const spin = document.getElementById(`ban-spin-${w.id}`);
+          const res  = document.getElementById(`ban-res-${w.id}`);
+          return tog ? applyFilter(w.id, field, tog, spin, res) : Promise.resolve();
+        });
+      await Promise.allSettled(tasks);
+      btn.textContent = "Done ✓";
+    });
+  }
+  return sub;
+}
+
+// ── Build WLAN sub-card ────────────────────────────────────────────────────────
+
+function buildWlanSub() {
+  const filters   = tableFilters();
+  const total     = wlanData.length;
+  const enabled   = wlanData.reduce((a, w) => a + wlanScore(w), 0);
+  const possible  = total * filters.length;
+  const compliant = wlanData.filter(w => wlanScore(w) === filters.length).length;
+  const status    = pctStatus(enabled, possible);
+  const missing   = possible - enabled;
+
+  let tableHtml;
+  if (total === 0) {
+    tableHtml = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">
+      No WLANs found. Verify your token has org and site WLAN read access.</div>`;
   } else {
     let thead = `<thead><tr><th>SSID</th><th>Scope</th>`;
-    filterDefs.forEach(f => {
+    filters.forEach(f => {
       thead += `<th class="filter-col"><div class="th-tooltip">${f.label}
-        <span class="tip-icon">?</span>
-        <div class="tip-box">${f.tooltip}</div></div></th>`;
+        <span class="tip-icon">?</span><div class="tip-box">${f.tooltip}</div></div></th>`;
     });
     thead += `<th>Status</th></tr></thead>`;
-
     let tbody = "<tbody>";
     wlanData.forEach(w => {
-      const score   = wlanScore(w);
-      const nameCls = w.enabled ? "ssid-name" : "ssid-name ssid-disabled";
+      const nameCls  = w.enabled ? "ssid-name" : "ssid-name ssid-disabled";
       const scopeLbl = w.scope === "site"
-        ? `<span style="font-size:12px;color:var(--muted)">${w.site_name || w.scope_id}</span>`
-        : `<span style="font-size:12px;color:var(--muted)">Org template</span>`;
+        ? `<span style="font-size:11px;color:var(--muted)">${w.site_name || w.scope_id}</span>`
+        : `<span style="font-size:11px;color:var(--muted)">Org template</span>`;
       tbody += `<tr><td class="${nameCls}">${w.ssid}${!w.enabled ? " (disabled)" : ""}</td><td>${scopeLbl}</td>`;
-      filterDefs.forEach(f => {
-        const checked  = w[f.field] ? "checked" : "";
-        const toggleId = `tog-${w.id}-${f.field}`;
-        const spinId   = `spin-${w.id}-${f.field}`;
-        const resId    = `res-${w.id}-${f.field}`;
+      filters.forEach(f => {
         tbody += `<td class="filter-col">
           <label class="toggle-wrap">
-            <input class="toggle-input" type="checkbox" id="${toggleId}" ${checked}
+            <input class="toggle-input" type="checkbox" id="tog-${w.id}-${f.field}" ${w[f.field] ? "checked" : ""}
                    data-wlan="${w.id}" data-field="${f.field}">
             <span class="toggle-track"></span>
           </label>
-          <div class="toggle-spinner" id="${spinId}"></div>
-          <div class="apply-result" id="${resId}"></div>
+          <div class="toggle-spinner" id="spin-${w.id}-${f.field}"></div>
+          <div class="apply-result"    id="res-${w.id}-${f.field}"></div>
         </td>`;
       });
-      tbody += `<td id="td-status-${w.id}">${statusPill(score, filterDefs.length)}</td></tr>`;
+      tbody += `<td id="td-status-${w.id}">${statusPill(wlanScore(w), filters.length)}</td></tr>`;
     });
     tbody += "</tbody>";
     tableHtml = `<div class="wlan-table-wrap"><table>${thead}${tbody}</table></div>`;
   }
 
-  const applyBtn = missing > 0
-    ? `<button class="btn-apply-all" id="apply-all-btn">Apply All Missing (${missing})</button>`
-    : `<button class="btn-apply-all" id="apply-all-btn" disabled>All Applied ✓</button>`;
+  const applyBtn = `<button class="btn-apply-all" id="apply-all-btn" ${!missing ? "disabled" : ""}>
+    ${missing ? `Apply All Missing (${missing})` : "All Applied ✓"}</button>`;
 
   const bodyHtml = `
     <div class="wlan-table-header">
-      <div class="wlan-table-title">${total} WLAN${total !== 1 ? "s" : ""} — ${filterDefs.length} checks each</div>
+      <div class="wlan-table-title">${total} WLAN${total !== 1 ? "s" : ""} · ${filters.length} checks each</div>
       ${applyBtn}
     </div>
     ${tableHtml}`;
 
-  const card = document.createElement("div");
-  card.className = `bp-card status-${status}`;
-  card.id = "card-wlan";
-  card.innerHTML = `
-    <div class="bp-card-header">
-      <div class="bp-card-icon">${cardIcon(status)}</div>
-      <div class="bp-card-info">
-        <div class="bp-card-title">WLAN Filters</div>
-        <div class="bp-card-desc">ARP filter, broadcast/multicast filter, limit probe response</div>
-      </div>
-      <div class="bp-card-right">
-        <div>
-          <div class="bp-score">${compliant}/${total}</div>
-          <div class="bp-score-label">WLANs compliant</div>
-        </div>
-        <span class="bp-badge ${badgeClass(status)}">${badgeLabel(status)}</span>
-        <span class="bp-chevron">▼</span>
-      </div>
-    </div>
-    <div class="bp-card-body">${bodyHtml}</div>`;
-
-  document.getElementById("cards").appendChild(card);
-
-  // Toggle expand on header click
-  card.querySelector(".bp-card-header").addEventListener("click", () => {
-    card.classList.toggle("expanded");
-  });
+  const sub = makeSubCard("sub-wlan", "📶", "WLAN Filters",
+    "ARP filter · Broadcast/multicast filter · Limit probe response",
+    status, `${compliant}/${total}`, "WLANs compliant", bodyHtml);
 
   // Wire toggles
-  card.querySelectorAll(".toggle-input").forEach(inp => {
+  sub.querySelectorAll(".toggle-input").forEach(inp => {
     inp.addEventListener("change", async e => {
       if (!e.target.checked) { e.target.checked = true; return; }
-      const wlanId  = e.target.dataset.wlan;
-      const field   = e.target.dataset.field;
-      const spinEl  = document.getElementById(`spin-${wlanId}-${field}`);
-      const resEl   = document.getElementById(`res-${wlanId}-${field}`);
-      await applyFilter(wlanId, field, e.target, spinEl, resEl);
+      const wlanId = e.target.dataset.wlan, field = e.target.dataset.field;
+      await applyFilter(wlanId, field, e.target,
+        document.getElementById(`spin-${wlanId}-${field}`),
+        document.getElementById(`res-${wlanId}-${field}`));
     });
   });
 
-  // Apply All button
-  const applyAllBtn = document.getElementById("apply-all-btn");
-  if (applyAllBtn) {
-    applyAllBtn.addEventListener("click", async () => {
-      applyAllBtn.disabled = true;
-      applyAllBtn.textContent = "Applying…";
+  // Apply All
+  const btn = sub.querySelector("#apply-all-btn");
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true; btn.textContent = "Applying…";
       const tasks = [];
-      wlanData.forEach(w => {
-        filterDefs.forEach(f => {
-          if (!w[f.field]) {
-            const toggleEl = document.getElementById(`tog-${w.id}-${f.field}`);
-            const spinEl   = document.getElementById(`spin-${w.id}-${f.field}`);
-            const resEl    = document.getElementById(`res-${w.id}-${f.field}`);
-            if (toggleEl) tasks.push(applyFilter(w.id, f.field, toggleEl, spinEl, resEl));
-          }
-        });
-      });
+      wlanData.forEach(w => filterDefs.forEach(f => {
+        if (!w[f.field]) {
+          const tog = document.getElementById(`tog-${w.id}-${f.field}`);
+          const sp  = document.getElementById(`spin-${w.id}-${f.field}`);
+          const re  = document.getElementById(`res-${w.id}-${f.field}`);
+          if (tog) tasks.push(applyFilter(w.id, f.field, tog, sp, re));
+        }
+      }));
       await Promise.allSettled(tasks);
-      applyAllBtn.textContent = "Done ✓";
-      setTimeout(() => { applyAllBtn.textContent = "All Applied ✓"; }, 2000);
+      btn.textContent = "Done ✓";
     });
   }
+  return sub;
 }
 
-// ── Render DPC card ────────────────────────────────────────────────────────────
+// ── Build DPC sub-card ────────────────────────────────────────────────────────
 
-function renderDpcCard(dpc) {
+function buildDpcSub(dpc) {
   const hasRules = dpc && dpc.has_rules;
   const status   = hasRules ? "green" : "red";
+  const scoreText  = hasRules ? `${dpc.rule_count}` : "0";
+  const scoreLabel = hasRules ? `rule${dpc.rule_count !== 1 ? "s" : ""} configured` : "no rules found";
 
   let bodyHtml;
   if (hasRules) {
     const chips = (dpc.templates || [])
-      .map(t => `<span class="dpc-tmpl-chip">✓ ${t.name} (${t.rule_count} rule${t.rule_count !== 1 ? "s" : ""})</span>`)
+      .map(t => `<span class="chip-green">✓ ${t.name} (${t.rule_count} rule${t.rule_count !== 1 ? "s" : ""})</span>`)
       .join("");
     bodyHtml = `
-      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px">
-        ${dpc.rule_count} rule${dpc.rule_count !== 1 ? "s" : ""} configured across
-        ${dpc.template_count} network template${dpc.template_count !== 1 ? "s" : ""}.
-        Dynamic Port Configuration will auto-assign port profiles based on connected device identity.
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+        ${dpc.rule_count} rule${dpc.rule_count !== 1 ? "s" : ""} across
+        ${dpc.template_count} template${dpc.template_count !== 1 ? "s" : ""}.
+        Port profiles are auto-assigned based on connected device identity.
       </p>
-      ${chips ? `<div class="dpc-templates">${chips}</div>` : ""}
-      <div class="dpc-nac-note" style="margin-top:16px">
-        &#128274;&nbsp; <strong>Ready to harden your network?</strong>
-        Once your deployment is stable, use the
-        <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
-        to migrate dynamic rules to proper NAC policies — replacing device-identity-based
-        port assignment with certificate or credential-based authentication.
+      ${chips ? `<div class="chip-row">${chips}</div>` : ""}
+      <div class="nac-note" style="margin-top:14px">
+        &#128274;&nbsp;<strong>Ready to harden?</strong>
+        Once your deployment is stable, use the <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
+        to migrate dynamic rules to proper NAC policies.
       </div>`;
   } else {
     bodyHtml = `
-      <div class="dpc-info-card">
+      <div class="info-card">
         <h4>What is Dynamic Port Configuration?</h4>
-        <p>
-          <span class="highlight">Dynamic Port Configuration (DPC)</span> automatically assigns
-          the correct switch port profile to a connected device based on its identity —
-          using MAC OUI or LLDP system name to recognise device types like IP phones,
-          cameras, printers, and APs.
-        </p>
-        <p>
-          Instead of manually configuring each port before a device is plugged in, DPC lets you
-          <span class="highlight">deploy switches immediately</span> and have the right VLAN,
-          PoE policy, and port settings applied the moment a device connects — dramatically
-          reducing on-site configuration time.
-        </p>
-        <p>
-          DPC rules are configured in your <strong style="color:var(--text)">Network Templates</strong>
-          under <em>Port Configuration → Dynamic</em>.
-        </p>
+        <p><span class="hl">Dynamic Port Configuration (DPC)</span> automatically assigns
+          the correct switch port profile based on device identity — using MAC OUI or LLDP
+          system name to recognise IP phones, cameras, printers, and APs.</p>
+        <p>Instead of manually configuring every port before deployment, DPC lets you
+          <span class="hl">deploy switches immediately</span> and have the right VLAN, PoE,
+          and port settings applied the moment a device connects.</p>
+        <p>Configure DPC rules in <strong style="color:var(--text)">Network Templates →
+          Port Configuration → Dynamic</strong>.</p>
       </div>
-      <div class="dpc-nac-note">
-        &#128161;&nbsp; <strong>Deployment tip:</strong>
-        Configure DPC rules to get your network up quickly without manual port-by-port setup.
-        Once the network is stable, use the
-        <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
-        to convert dynamic rules into proper <strong style="color:var(--text)">NAC policies</strong>
-        for a secure, production-ready network.
+      <div class="nac-note">
+        &#128161;&nbsp;<strong>Deployment tip:</strong> Configure DPC rules for fast initial
+        rollout. Once stable, use the <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
+        to promote dynamic rules to proper NAC policies for production security.
       </div>`;
   }
-
-  const scoreText  = hasRules ? `${dpc.rule_count} rule${dpc.rule_count !== 1 ? "s" : ""}` : "Not configured";
-  const scoreLabel = hasRules ? "across " + dpc.template_count + " template" + (dpc.template_count !== 1 ? "s" : "") : "No DPC rules found";
-
-  const card = document.createElement("div");
-  card.className = `bp-card status-${status}`;  /* starts collapsed */
-  card.id = "card-dpc";
-  card.innerHTML = `
-    <div class="bp-card-header">
-      <div class="bp-card-icon">${cardIcon(status)}</div>
-      <div class="bp-card-info">
-        <div class="bp-card-title">Dynamic Port Configuration</div>
-        <div class="bp-card-desc">Auto-assign port profiles based on connected device identity</div>
-      </div>
-      <div class="bp-card-right">
-        <div>
-          <div class="bp-score">${scoreText}</div>
-          <div class="bp-score-label">${scoreLabel}</div>
-        </div>
-        <span class="bp-badge ${badgeClass(status)}">${badgeLabel(status)}</span>
-        <span class="bp-chevron">▼</span>
-      </div>
-    </div>
-    <div class="bp-card-body">${bodyHtml}</div>`;
-
-  document.getElementById("cards").appendChild(card);
-
-  card.querySelector(".bp-card-header").addEventListener("click", () => {
-    card.classList.toggle("expanded");
-  });
+  return makeSubCard("sub-dpc", "🔌", "Dynamic Port Configuration",
+    "Auto-assign port profiles based on connected device identity",
+    status, scoreText, scoreLabel, bodyHtml);
 }
 
-// ── Render License card ────────────────────────────────────────────────────────
+// ── Build License sub-card ────────────────────────────────────────────────────
 
-function renderLicenseCard(lic) {
-  if (lic.error && !lic.subscriptions) {
-    lic = { subscriptions: [], total: 0, active: 0, expiring: 0, expired: 0 };
-  }
-  const subs     = lic.subscriptions || [];
-  const expired  = lic.expired  || 0;
-  const expiring = lic.expiring || 0;
-  const active   = lic.active   || 0;
-  const total    = lic.total    || 0;
-
-  const status = expired > 0 ? "red" : expiring > 0 ? "yellow" : total > 0 ? "green" : "red";
-  const scoreText  = total === 0 ? "None" : `${active + expiring}/${total}`;
-  const scoreLabel = total === 0 ? "no subscriptions found" : "subscriptions current";
+function buildLicenseSub(lic) {
+  const subs     = (lic && lic.subscriptions) || [];
+  const expired  = (lic && lic.expired)  || 0;
+  const expiring = (lic && lic.expiring) || 0;
+  const active   = (lic && lic.active)   || 0;
+  const total    = (lic && lic.total)    || 0;
+  const status   = lic.error ? "muted" : expired > 0 ? "red" : expiring > 0 ? "yellow" : total > 0 ? "green" : "red";
 
   function fmtDate(ts) {
     if (!ts) return "No expiry";
-    return new Date(ts * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    return new Date(ts * 1000).toLocaleDateString(undefined, {year:"numeric",month:"short",day:"numeric"});
   }
-
-  function subStatusPill(s) {
+  function subBadge(s) {
     if (s.status === "expired")  return `<span class="bp-badge red">Expired</span>`;
     if (s.status === "expiring") return `<span class="bp-badge yellow">Expiring soon</span>`;
     return `<span class="bp-badge green">Active</span>`;
   }
 
   let bodyHtml;
-  if (subs.length === 0) {
-    bodyHtml = `<div style="padding:20px;color:var(--muted);font-size:13px;">
-      No subscription data found. Verify your API token has org admin access.
-    </div>`;
+  if (!subs.length) {
+    bodyHtml = `<div style="padding:16px;color:var(--muted);font-size:13px;">
+      ${lic.error ? `Error fetching subscriptions: ${lic.error}` : "No subscription data returned. Verify API token has org admin access."}</div>`;
   } else {
-    const rows = subs.map(s => `
-      <tr>
-        <td style="font-family:monospace;font-size:12px">${s.type}</td>
-        <td style="text-align:right">${s.quantity ?? "—"}</td>
-        <td style="text-align:right;color:var(--muted)">${s.remaining_quantity ?? "—"}</td>
-        <td>${fmtDate(s.end_time)}</td>
-        <td>${subStatusPill(s)}</td>
-      </tr>`).join("");
-
     let summary = "";
-    if (expired > 0)  summary += `<span class="bp-badge red" style="margin-right:8px">${expired} expired</span>`;
-    if (expiring > 0) summary += `<span class="bp-badge yellow" style="margin-right:8px">${expiring} expiring within 90 days</span>`;
-    if (expired === 0 && expiring === 0) summary = `<span class="bp-badge green">All subscriptions current</span>`;
+    if (expired > 0)  summary += `<span class="bp-badge red" style="margin-right:6px">${expired} expired</span>`;
+    if (expiring > 0) summary += `<span class="bp-badge yellow" style="margin-right:6px">${expiring} expiring within 90 days</span>`;
+    if (!expired && !expiring) summary = `<span class="bp-badge green">All subscriptions current</span>`;
+
+    const rows = subs.map(s => `<tr>
+      <td style="font-family:monospace;font-size:12px">${s.type}</td>
+      <td style="text-align:right">${s.quantity ?? "—"}</td>
+      <td style="text-align:right;color:var(--muted)">${s.remaining_quantity ?? "—"}</td>
+      <td style="color:var(--muted)">${fmtDate(s.end_time)}</td>
+      <td>${subBadge(s)}</td>
+    </tr>`).join("");
 
     bodyHtml = `
-      <div style="margin-bottom:14px">${summary}</div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-        <table style="width:100%;border-collapse:collapse;font-size:13px">
-          <thead>
-            <tr style="border-bottom:1px solid var(--border)">
-              <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Type</th>
-              <th style="padding:10px 14px;text-align:right;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Qty</th>
-              <th style="padding:10px 14px;text-align:right;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Remaining</th>
-              <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Expires</th>
-              <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Status</th>
-            </tr>
-          </thead>
+      <div style="margin-bottom:12px">${summary}</div>
+      <div class="wlan-table-wrap">
+        <table>
+          <thead><tr>
+            <th>Type</th>
+            <th style="text-align:right">Qty</th>
+            <th style="text-align:right">Remaining</th>
+            <th>Expires</th>
+            <th>Status</th>
+          </tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
   }
 
-  const card = document.createElement("div");
-  card.className = `bp-card status-${status}`;
-  card.id = "card-licenses";
-  card.innerHTML = `
-    <div class="bp-card-header">
-      <div class="bp-card-icon">${cardIcon(status)}</div>
-      <div class="bp-card-info">
-        <div class="bp-card-title">License Check</div>
-        <div class="bp-card-desc">Subscription status across all Mist license types</div>
-      </div>
-      <div class="bp-card-right">
-        <div>
-          <div class="bp-score">${scoreText}</div>
-          <div class="bp-score-label">${scoreLabel}</div>
-        </div>
-        <span class="bp-badge ${badgeClass(status)}">${badgeLabel(status)}</span>
-        <span class="bp-chevron">▼</span>
-      </div>
-    </div>
-    <div class="bp-card-body">${bodyHtml}</div>`;
-
-  document.getElementById("cards").appendChild(card);
-  card.querySelector(".bp-card-header").addEventListener("click", () => card.classList.toggle("expanded"));
+  const scoreText  = total === 0 ? "None" : `${active + expiring}/${total}`;
+  const scoreLabel = total === 0 ? "no subscriptions" : "current";
+  return makeSubCard("sub-licenses", "🪪", "License Check",
+    "Subscription status across all Mist license types",
+    status, scoreText, scoreLabel, bodyHtml);
 }
 
-// ── Render Access Assurance card ───────────────────────────────────────────────
+// ── Build Access Assurance sub-card ───────────────────────────────────────────
 
-function renderAaCard(aa) {
-  const subscribed = aa.subscribed || false;
-  const configured = aa.configured || false;
-  const nacRules   = aa.nac_rules  || 0;
-  const nacEnabled = aa.nac_enabled || false;
-
-  let status;
-  if (!subscribed)            status = "red";
-  else if (!configured)       status = "yellow";
-  else                        status = "green";
-
-  const scoreText  = !subscribed ? "Not subscribed" : configured ? "Configured" : "Not configured";
-  const scoreLabel = !subscribed ? "no AA subscription" : nacRules > 0 ? `${nacRules} NAC rule${nacRules !== 1 ? "s" : ""}` : nacEnabled ? "NAC enabled" : "check configuration";
+function buildAaSub(aa) {
+  const subscribed = aa && aa.subscribed;
+  const configured = aa && aa.configured;
+  const nacRules   = (aa && aa.nac_rules) || 0;
+  const status     = !subscribed ? "red" : !configured ? "yellow" : "green";
+  const scoreText  = !subscribed ? "None" : configured ? "Active" : "Inactive";
+  const scoreLabel = !subscribed ? "not subscribed" : nacRules > 0 ? `${nacRules} NAC rule${nacRules !== 1 ? "s" : ""}` : "not configured";
 
   let bodyHtml;
   if (!subscribed) {
     bodyHtml = `
-      <div class="dpc-info-card">
+      <div class="info-card">
         <h4>What is Mist Access Assurance?</h4>
-        <p>
-          <span class="highlight">Mist Access Assurance</span> is HPE Networking's cloud-native
-          802.1X / NAC (Network Access Control) solution. It replaces traditional RADIUS
-          servers with a cloud-delivered service that authenticates users and devices before
-          they're allowed onto the network.
-        </p>
-        <p>
-          With Access Assurance you can enforce <span class="highlight">certificate-based
-          or credential-based authentication</span> for both wired and wireless clients —
-          ensuring only authorised devices can connect, with full visibility into who is on
-          the network and why.
-        </p>
-        <p>
-          It integrates natively with Mist AI, providing posture checking, dynamic VLAN
-          assignment, and seamless guest/BYOD workflows — all managed from the same
-          Mist dashboard.
-        </p>
+        <p><span class="hl">Mist Access Assurance</span> is HPE Networking's cloud-native
+          802.1X / NAC solution. It replaces traditional RADIUS servers with a cloud-delivered
+          service that authenticates users and devices before granting network access.</p>
+        <p>Enforce <span class="hl">certificate or credential-based authentication</span>
+          for wired and wireless clients — ensuring only authorised devices connect, with
+          full AI-driven visibility into who is on the network and why.</p>
       </div>
-      <div class="dpc-nac-note">
-        &#128274;&nbsp; <strong>Upgrade your security posture:</strong>
-        Contact your HPE Networking account team or visit the Mist portal to add an
-        Access Assurance subscription to this org. Once subscribed, the
-        <a href="/scan/{{ org_id }}">DPC → NAC Converter</a> can help you migrate
-        existing dynamic port rules to proper NAC policies.
+      <div class="nac-note">
+        &#128274;&nbsp;<strong>Upgrade your security posture:</strong>
+        Contact your HPE Networking account team to add an Access Assurance subscription.
+        Once subscribed, the <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
+        can migrate existing dynamic port rules to proper NAC policies.
       </div>`;
   } else if (!configured) {
-    const sub = aa.subscription || {};
     bodyHtml = `
-      <div style="margin-bottom:14px">
-        <span class="bp-badge green" style="margin-right:8px">✓ Subscribed</span>
+      <div style="margin-bottom:12px">
+        <span class="bp-badge green" style="margin-right:6px">✓ Subscribed</span>
         <span class="bp-badge yellow">⚠ Not yet configured</span>
       </div>
-      <div class="dpc-info-card">
+      <div class="info-card">
         <h4>Access Assurance is licensed but not configured</h4>
-        <p>
-          Your org has an active <strong style="color:var(--text)">Access Assurance</strong>
-          subscription, but no NAC rules or IDP profiles have been set up yet.
-        </p>
-        <p>
-          To get started, navigate to <strong style="color:var(--text)">Organization → Access →
-          NAC Rules</strong> in the Mist portal and create your first authentication policy.
-          You'll need to configure at least one IdP (identity provider) and one NAC rule
-          to start enforcing 802.1X authentication.
-        </p>
+        <p>Your org has an active Access Assurance subscription but no NAC rules or IDP
+          profiles have been set up yet.</p>
+        <p>Go to <strong style="color:var(--text)">Organization → Access → NAC Rules</strong>
+          in the Mist portal to create your first authentication policy. You'll need at least
+          one IdP (identity provider) and one NAC rule to start enforcing 802.1X.</p>
       </div>
-      <div class="dpc-nac-note">
-        &#128161;&nbsp; <strong>Deployment tip:</strong>
-        Start with a monitor-only NAC rule to see what traffic would be affected before
-        enforcing authentication. Once stable, use the
-        <a href="/scan/{{ org_id }}">DPC → NAC Converter</a> to fold your existing
-        dynamic port rules into your NAC policies.
+      <div class="nac-note">
+        &#128161;&nbsp;<strong>Tip:</strong> Start with a monitor-only rule to see affected
+        traffic before enforcing authentication. Then use the
+        <a href="/scan/{{ org_id }}">DPC → NAC Converter</a> to fold dynamic port rules
+        into your NAC policies.
       </div>`;
   } else {
     bodyHtml = `
-      <div style="margin-bottom:14px">
-        <span class="bp-badge green" style="margin-right:8px">✓ Subscribed</span>
-        <span class="bp-badge green" style="margin-right:8px">✓ NAC Enabled</span>
-        ${nacRules > 0 ? `<span class="bp-badge green">✓ ${nacRules} NAC rule${nacRules !== 1 ? "s" : ""} configured</span>` : ""}
+      <div style="margin-bottom:12px">
+        <span class="bp-badge green" style="margin-right:6px">✓ Subscribed</span>
+        <span class="bp-badge green" style="margin-right:6px">✓ NAC Enabled</span>
+        ${nacRules > 0 ? `<span class="bp-badge green">✓ ${nacRules} NAC rule${nacRules !== 1 ? "s" : ""}</span>` : ""}
       </div>
-      <div class="dpc-info-card">
+      <div class="info-card">
         <h4>Access Assurance is active</h4>
-        <p>
-          This org has Access Assurance subscribed and configured.
-          ${nacRules > 0
-            ? `<strong style="color:var(--text)">${nacRules} NAC rule${nacRules !== 1 ? "s" : ""}</strong> are defined, controlling access for wired and wireless clients.`
-            : "NAC is enabled in org settings."}
-        </p>
-        <p>
-          Ensure your WLANs and switch profiles reference the correct NAC label so that
-          clients are challenged for authentication on connect.
-        </p>
+        <p>This org has Access Assurance configured${nacRules > 0 ? ` with <strong style="color:var(--text)">${nacRules} NAC rule${nacRules !== 1 ? "s" : ""}</strong> controlling wired and wireless client access` : ""}.
+          Ensure WLANs and switch profiles reference the correct NAC label so clients are
+          challenged on connect.</p>
       </div>
-      <div class="dpc-nac-note">
-        &#128274;&nbsp; <strong>Keep it current:</strong>
-        Periodically review your NAC rules and IDP certificates to ensure they haven't
-        expired. Use the <a href="/scan/{{ org_id }}">DPC → NAC Converter</a> to check
-        if any dynamic port rules should be promoted to full NAC policies.
+      <div class="nac-note">
+        &#128274;&nbsp;<strong>Keep it current:</strong> Review NAC rules and IDP certificates
+        regularly. Use the <a href="/scan/{{ org_id }}">DPC → NAC Converter</a> to check if
+        any dynamic port rules should be promoted to full NAC policies.
       </div>`;
   }
+  return makeSubCard("sub-aa", "🔒", "Access Assurance",
+    "Cloud-native 802.1X / NAC authentication service",
+    status, scoreText, scoreLabel, bodyHtml);
+}
 
-  const card = document.createElement("div");
-  card.className = `bp-card status-${status}`;
-  card.id = "card-aa";
-  card.innerHTML = `
-    <div class="bp-card-header">
-      <div class="bp-card-icon">${status === "green" ? "🔒" : status === "yellow" ? "🔓" : "🔓"}</div>
-      <div class="bp-card-info">
-        <div class="bp-card-title">Access Assurance</div>
-        <div class="bp-card-desc">Cloud-native 802.1X / NAC authentication service</div>
-      </div>
-      <div class="bp-card-right">
-        <div>
-          <div class="bp-score" style="font-size:16px">${scoreText}</div>
-          <div class="bp-score-label">${scoreLabel}</div>
-        </div>
-        <span class="bp-badge ${badgeClass(status)}">${badgeLabel(status)}</span>
-        <span class="bp-chevron">▼</span>
-      </div>
-    </div>
-    <div class="bp-card-body">${bodyHtml}</div>`;
+// ── Main render ───────────────────────────────────────────────────────────────
 
-  document.getElementById("cards").appendChild(card);
-  card.querySelector(".bp-card-header").addEventListener("click", () => card.classList.toggle("expanded"));
+function renderCategories(data) {
+  const cardsEl = document.getElementById("cards");
+  cardsEl.innerHTML = "";
+
+  const wireless = makeParentCard("wireless", "📡", "Wireless",
+    "WLAN security and radio configuration checks",
+    [buildWlanSub(), buildBannedClientsSub()]);
+
+  const wired = makeParentCard("wired", "🔌", "Wired",
+    "Switch port configuration and wired best practices",
+    [buildDpcSub(data.dpc || {})]);
+
+  const firewall = makeParentCard("firewall", "🛡️", "Firewall",
+    "Security policy and firewall rule checks",
+    []); // placeholder — no checks yet
+
+  const org = makeParentCard("org", "🏢", "Organization",
+    "Licensing, subscriptions, and org-level settings",
+    [buildLicenseSub(data.licenses || {}), buildAaSub(data.aa || {})]);
+
+  [wireless, wired, firewall, org].forEach(c => cardsEl.appendChild(c));
 }
 
 // ── Load ───────────────────────────────────────────────────────────────────────
@@ -883,18 +942,12 @@ async function load() {
       if (data.error === "Not authenticated") { window.location.href = "/login"; return; }
       throw new Error(data.error || `HTTP ${res.status}`);
     }
-
     wlanData   = data.wlans   || [];
     filterDefs = data.filters || [];
 
     loadEl.style.display  = "none";
     cardsEl.style.display = "flex";
-    cardsEl.innerHTML     = "";
-
-    renderWlanCard();
-    renderDpcCard(data.dpc || {});
-    renderLicenseCard(data.licenses || {});
-    renderAaCard(data.aa || {});
+    renderCategories(data);
 
   } catch (err) {
     loadEl.style.display = "none";

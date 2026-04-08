@@ -1350,6 +1350,17 @@ BP_FILTERS = [
             "unnecessary probe response overhead and improving channel efficiency."
         ),
     },
+    {
+        "field":      "block_blacklisted_clients",
+        "label":      "Prevent Banned Clients",
+        "standalone": True,
+        "tooltip": (
+            "Prevents clients on the org's banned/blacklisted client list from "
+            "associating to this SSID. When enabled, any client whose MAC address "
+            "appears in the banned clients list will be denied association, even if "
+            "they have valid credentials."
+        ),
+    },
 ]
 
 
@@ -1384,15 +1395,16 @@ def api_bestpractices(org_id):
             if not wlan_id:
                 continue
             out.append({
-                "id":                   wlan_id,
-                "ssid":                 w.get("ssid", "Unnamed"),
-                "enabled":              w.get("enabled", True),
-                "arp_filter":           bool(w.get("arp_filter", False)),
-                "limit_bcast":          bool(w.get("limit_bcast", False)),
-                "limit_probe_response": bool(w.get("limit_probe_response", False)),
-                "scope":                scope,       # "org" or "site"
-                "scope_id":             scope_id,    # org_id or site_id
-                "site_name":            site_name,
+                "id":                        wlan_id,
+                "ssid":                      w.get("ssid", "Unnamed"),
+                "enabled":                   w.get("enabled", True),
+                "arp_filter":                bool(w.get("arp_filter", False)),
+                "limit_bcast":               bool(w.get("limit_bcast", False)),
+                "limit_probe_response":      bool(w.get("limit_probe_response", False)),
+                "block_blacklisted_clients": bool(w.get("block_blacklisted_clients", False)),
+                "scope":                     scope,
+                "scope_id":                  scope_id,
+                "site_name":                 site_name,
             })
         return out
 
