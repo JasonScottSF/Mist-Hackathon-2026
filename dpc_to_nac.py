@@ -892,6 +892,96 @@ def api_apply(org_id):
 
 
 
+# ── Device Inventory routes ──────────────────────────────────────────────────
+
+@app.route("/inventory/<org_id>")
+def inventory(org_id):
+    if not valid_uuid(org_id):
+        return redirect(url_for("orgs"))
+    sid = get_authed_sid()
+    if not sid:
+        return redirect(url_for("login"))
+    if not org_allowed(org_id):
+        return redirect(url_for("orgs"))
+    return render_template("inventory.html",
+                           org_id=org_id,
+                           user_name=_sessions[sid].get("user_name", ""))
+
+
+@app.route("/api/inventory/<org_id>")
+def api_inventory(org_id):
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    site_names = _fetch_site_names(sid, org_id)
+    devices    = []
+    for dtype in ("ap", "switch", "gateway"):
+        try:
+            raw     = mist_get(sid, f"/orgs/{org_id}/stats/devices?type={dtype}&fields=*&limit=1000&status=all")
+            results = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+            for d in results:
+                d["site_name"] = site_names.get(d.get("site_id", ""), "")
+            devices.extend(results)
+        except Exception as e:
+            _log.warning("Inventory %s fetch failed: %s", dtype, e)
+
+    # Available firmware versions per type for the upgrade picker
+    avail_versions = {}
+    for dtype in ("ap", "switch", "gateway"):
+        try:
+            raw = mist_get(sid, f"/orgs/{org_id}/devices/versions?type={dtype}")
+            items = raw if isinstance(raw, list) else raw.get("results", [])
+            avail_versions[dtype] = [
+                v.get("version", v) if isinstance(v, dict) else str(v)
+                for v in items if v
+            ]
+        except Exception:
+            avail_versions[dtype] = []
+
+    return jsonify({"devices": devices, "avail_versions": avail_versions})
+
+
+@app.route("/api/upgrade/<org_id>", methods=["POST"])
+def api_upgrade_devices(org_id):
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    data       = request.json or {}
+    device_ids = data.get("device_ids", [])
+    version    = (data.get("version") or "").strip()
+
+    if not device_ids:
+        return jsonify({"error": "No devices specified"}), 400
+    if not version:
+        return jsonify({"error": "No target version specified"}), 400
+
+    actor = _sessions[sid].get("email", "unknown")
+    _log.info("UPGRADE org=%s actor=%s count=%d version=%s ip=%s",
+              org_id, actor, len(device_ids), version, request.remote_addr)
+
+    try:
+        r = mist_post(sid, f"/orgs/{org_id}/devices/upgrade", {
+            "version":    version,
+            "device_ids": device_ids,
+            "enable_p2p": True,
+        })
+        if r.ok:
+            return jsonify({"status": "ok", "count": len(device_ids), "version": version})
+        return jsonify({"status": "error", "detail": r.text[:300]}), r.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Network Health routes ─────────────────────────────────────────────────────
 
 @app.route("/health/<org_id>")
