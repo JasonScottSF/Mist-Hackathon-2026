@@ -893,6 +893,8 @@ async function load() {
 
     renderWlanCard();
     renderDpcCard(data.dpc || {});
+    renderLicenseCard(data.licenses || {});
+    renderAaCard(data.aa || {});
 
   } catch (err) {
     loadEl.style.display = "none";
