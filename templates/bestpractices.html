@@ -641,33 +641,52 @@ function buildWlanSub() {
     tableHtml = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">
       No WLANs found. Verify your token has org and site WLAN read access.</div>`;
   } else {
-    let thead = `<thead><tr><th>SSID</th><th>Scope</th>`;
+    const colSpan = filters.length + 3; // SSID + Scope + filters + Status
+    let thead = `<thead><tr><th>SSID</th><th>Scope / Site</th>`;
     filters.forEach(f => {
       thead += `<th class="filter-col"><div class="th-tooltip">${f.label}
         <span class="tip-icon">?</span><div class="tip-box">${f.tooltip}</div></div></th>`;
     });
     thead += `<th>Status</th></tr></thead>`;
+
+    const sectionHdr = (label, count) =>
+      `<tr><td colspan="${colSpan}" style="padding:8px 12px 6px;font-size:11px;font-weight:700;
+        letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+        background:var(--surface2);border-top:1px solid var(--border);">
+        ${label} <span style="font-weight:400;opacity:.7;">(${count})</span>
+      </td></tr>`;
+
+    function wlanRows(list) {
+      return list.map(w => {
+        const nameCls  = w.enabled ? "ssid-name" : "ssid-name ssid-disabled";
+        const scopeLbl = w.scope === "site"
+          ? `<span style="font-size:11px;color:var(--muted)">${w.site_name || w.scope_id}</span>`
+          : `<span style="font-size:11px;color:var(--muted)">—</span>`;
+        let row = `<tr><td class="${nameCls}">${w.ssid}${!w.enabled ? " (disabled)" : ""}</td><td>${scopeLbl}</td>`;
+        filters.forEach(f => {
+          row += `<td class="filter-col">
+            <label class="toggle-wrap">
+              <input class="toggle-input" type="checkbox" id="tog-${w.id}-${f.field}" ${w[f.field] ? "checked" : ""}
+                     data-wlan="${w.id}" data-field="${f.field}">
+              <span class="toggle-track"></span>
+            </label>
+            <div class="toggle-spinner" id="spin-${w.id}-${f.field}"></div>
+            <div class="apply-result"    id="res-${w.id}-${f.field}"></div>
+          </td>`;
+        });
+        row += `<td id="td-status-${w.id}">${statusPill(wlanScore(w), filters.length)}</td></tr>`;
+        return row;
+      }).join("");
+    }
+
+    const orgWlans  = wlanData.filter(w => w.scope === "org");
+    const siteWlans = wlanData.filter(w => w.scope === "site");
+
     let tbody = "<tbody>";
-    wlanData.forEach(w => {
-      const nameCls  = w.enabled ? "ssid-name" : "ssid-name ssid-disabled";
-      const scopeLbl = w.scope === "site"
-        ? `<span style="font-size:11px;color:var(--muted)">${w.site_name || w.scope_id}</span>`
-        : `<span style="font-size:11px;color:var(--muted)">Org template</span>`;
-      tbody += `<tr><td class="${nameCls}">${w.ssid}${!w.enabled ? " (disabled)" : ""}</td><td>${scopeLbl}</td>`;
-      filters.forEach(f => {
-        tbody += `<td class="filter-col">
-          <label class="toggle-wrap">
-            <input class="toggle-input" type="checkbox" id="tog-${w.id}-${f.field}" ${w[f.field] ? "checked" : ""}
-                   data-wlan="${w.id}" data-field="${f.field}">
-            <span class="toggle-track"></span>
-          </label>
-          <div class="toggle-spinner" id="spin-${w.id}-${f.field}"></div>
-          <div class="apply-result"    id="res-${w.id}-${f.field}"></div>
-        </td>`;
-      });
-      tbody += `<td id="td-status-${w.id}">${statusPill(wlanScore(w), filters.length)}</td></tr>`;
-    });
+    if (orgWlans.length)  tbody += sectionHdr("Org Template WLANs", orgWlans.length)  + wlanRows(orgWlans);
+    if (siteWlans.length) tbody += sectionHdr("Site WLANs", siteWlans.length) + wlanRows(siteWlans);
     tbody += "</tbody>";
+
     tableHtml = `<div class="wlan-table-wrap"><table>${thead}${tbody}</table></div>`;
   }
 
