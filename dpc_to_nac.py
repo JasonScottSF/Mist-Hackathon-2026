@@ -1139,5 +1139,393 @@ def api_site_health(org_id, site_id):
     })
 
 
+# ── Client lookup + Marvis client troubleshoot ───────────────────────────────
+
+@app.route("/api/clients/<org_id>")
+def api_clients(org_id):
+    """Return recent wireless clients for the org (used to populate dropdown)."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    try:
+        raw     = mist_get(sid, f"/orgs/{org_id}/clients/search?limit=1000&duration=1d")
+        results = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+        clients = []
+        seen    = set()
+        for c in results:
+            mac = (c.get("mac") or "").strip().lower()
+            if not mac or mac in seen:
+                continue
+            seen.add(mac)
+            hostname = _normalize_field(c.get("hostname")) or _normalize_field(c.get("username")) or ""
+            clients.append({
+                "mac":      mac,
+                "hostname": hostname,
+                "username": _normalize_field(c.get("username")),
+                "ip":       _normalize_field(c.get("ip")),
+                "site_id":  c.get("site_id", ""),
+                "ssid":     _normalize_field(c.get("ssid")),
+                "os":       _normalize_field(c.get("os")),
+            })
+        # Sort: named clients first, then by hostname
+        clients.sort(key=lambda c: (0 if c["hostname"] else 1, c["hostname"].lower()))
+        return jsonify({"clients": clients})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/troubleshoot-client/<org_id>")
+def api_troubleshoot_client(org_id):
+    """Run Marvis client troubleshoot for a specific MAC address."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    mac     = (request.args.get("mac") or "").strip()
+    site_id = (request.args.get("site_id") or "").strip()
+
+    if not mac:
+        return jsonify({"error": "mac parameter required"}), 400
+
+    try:
+        path = f"/orgs/{org_id}/troubleshoot?mac={mac}"
+        if site_id and valid_uuid(site_id):
+            path += f"&site_id={site_id}"
+        result = mist_get(sid, path)
+        return jsonify(result if isinstance(result, dict) else {"results": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Troubleshooting routes ────────────────────────────────────────────────────
+
+@app.route("/troubleshoot/<org_id>")
+def troubleshoot(org_id):
+    if not valid_uuid(org_id):
+        return redirect(url_for("orgs"))
+    sid = get_authed_sid()
+    if not sid:
+        return redirect(url_for("login"))
+    if not org_allowed(org_id):
+        return redirect(url_for("orgs"))
+    return render_template("troubleshoot.html",
+                           org_id=org_id,
+                           user_name=_sessions[sid].get("user_name", ""))
+
+
+@app.route("/api/troubleshoot/<org_id>")
+def api_troubleshoot(org_id):
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    end   = int(time.time())
+    start = end - 7 * 86400
+
+    # 7-day SLE trends — one API call per day per category (21 calls in parallel)
+    _SKIP = {"site_id", "num_aps", "num_clients", "num_switches", "num_gateways"}
+
+    def _day_avg(category, day_start, day_end):
+        """Return org-wide average SLE score (0–100) for one category over one day."""
+        try:
+            raw     = mist_get(sid, f"/orgs/{org_id}/insights/sites-sle"
+                                    f"?sle={category}&start={day_start}&end={day_end}")
+            results = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+            vals = [v for site in results
+                      for k, v in site.items()
+                      if k not in _SKIP
+                      and isinstance(v, (int, float))
+                      and not isinstance(v, bool)
+                      and 0 <= v <= 1]
+            avg = round(sum(vals) / len(vals) * 100, 1) if vals else None
+            _log.info("SLE day %s %s→%s: %d sites, %d vals → %s",
+                      category, day_start, day_end, len(results), len(vals), avg)
+            return avg
+        except Exception as e:
+            _log.warning("SLE day_avg %s [%s-%s] failed: %s", category, day_start, day_end, e)
+            return None
+
+    days = [(start + i * 86400, start + (i + 1) * 86400) for i in range(7)]
+    trends = {cat: [None] * 7 for cat in ("wifi", "wired", "wan")}
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {
+            pool.submit(_day_avg, cat, ds, de): (cat, idx)
+            for idx, (ds, de) in enumerate(days)
+            for cat in ("wifi", "wired", "wan")
+        }
+        for fut in as_completed(futures):
+            cat, idx = futures[fut]
+            trends[cat][idx] = fut.result()
+
+    # Marvis Actions — open Marvis-group alarms
+    marvis_open = []
+    try:
+        raw = mist_get(sid, f"/orgs/{org_id}/alarms/search?group=marvis&status=open&limit=100")
+        results = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+        marvis_open = [{
+            "title":     a.get("type", "Action"),
+            "site_id":   a.get("site_id", ""),
+            "site_name": a.get("site_name", ""),
+            "severity":  a.get("severity", ""),
+            "hostnames": a.get("hostnames", []),
+            "count":     a.get("count", 1),
+            "timestamp": a.get("timestamp"),
+        } for a in results]
+    except Exception as e:
+        _log.warning("Marvis open fetch failed: %s", e)
+
+    # AI Validated Events — resolved Marvis-group alarms
+    marvis_resolved = []
+    try:
+        raw = mist_get(sid, f"/orgs/{org_id}/alarms/search?group=marvis&status=resolved&limit=100")
+        results = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+        marvis_resolved = [{
+            "title":          a.get("type", "Event"),
+            "site_id":        a.get("site_id", ""),
+            "site_name":      a.get("site_name", ""),
+            "severity":       a.get("severity", ""),
+            "hostnames":      a.get("hostnames", []),
+            "count":          a.get("count", 1),
+            "timestamp":      a.get("timestamp"),
+            "resolved_time":  a.get("resolved_time") or a.get("updated_time"),
+        } for a in results]
+    except Exception as e:
+        _log.warning("Marvis resolved fetch failed: %s", e)
+
+    # Enrich with site names where missing
+    site_names = _fetch_site_names(sid, org_id)
+    for item in marvis_open + marvis_resolved:
+        if not item.get("site_name") and item.get("site_id"):
+            item["site_name"] = site_names.get(item["site_id"], "")
+
+    return jsonify({
+        "trends":          trends,   # {wifi: [avg0..avg6], wired: [...], wan: [...]}
+        "ts_start":        start,    # epoch of day 0
+        "marvis_open":     marvis_open,
+        "marvis_resolved": marvis_resolved,
+    })
+
+
+# ── Best Practices routes ─────────────────────────────────────────────────────
+
+BP_FILTERS = [
+    {
+        "field":   "arp_filter",
+        "label":   "ARP Filter",
+        "tooltip": (
+            "Smart ARP filtering: the AP answers ARP requests on behalf of "
+            "wireless clients, eliminating broadcast ARP traffic on the SSID. "
+            "Reduces airtime waste and improves performance on high-density networks."
+        ),
+    },
+    {
+        "field":   "limit_bcast",
+        "label":   "Broadcast / Multicast Filter",
+        "tooltip": (
+            "Limits broadcast and multicast packets forwarded to wireless clients. "
+            "Suppresses chatty protocols (SSDP, NetBIOS, etc.) that consume airtime "
+            "without benefiting most clients."
+        ),
+    },
+    {
+        "field":   "limit_probe_response",
+        "label":   "Limit Probe Response",
+        "tooltip": (
+            "Ignores 802.11 broadcast probe requests — probes sent without a specific "
+            "SSID. The AP only responds to directed probes for this SSID, reducing "
+            "unnecessary probe response overhead and improving channel efficiency."
+        ),
+    },
+]
+
+
+@app.route("/bestpractices/<org_id>")
+def bestpractices(org_id):
+    if not valid_uuid(org_id):
+        return redirect(url_for("orgs"))
+    sid = get_authed_sid()
+    if not sid:
+        return redirect(url_for("login"))
+    if not org_allowed(org_id):
+        return redirect(url_for("orgs"))
+    return render_template("bestpractices.html",
+                           org_id=org_id,
+                           user_name=_sessions[sid].get("user_name", ""))
+
+
+@app.route("/api/bestpractices/<org_id>")
+def api_bestpractices(org_id):
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    def _parse_wlans(raw_list, scope, scope_id, site_name=""):
+        out = []
+        for w in (raw_list if isinstance(raw_list, list) else raw_list.get("results", [])):
+            wlan_id = w.get("id", "")
+            if not wlan_id:
+                continue
+            out.append({
+                "id":                   wlan_id,
+                "ssid":                 w.get("ssid", "Unnamed"),
+                "enabled":              w.get("enabled", True),
+                "arp_filter":           bool(w.get("arp_filter", False)),
+                "limit_bcast":          bool(w.get("limit_bcast", False)),
+                "limit_probe_response": bool(w.get("limit_probe_response", False)),
+                "scope":                scope,       # "org" or "site"
+                "scope_id":             scope_id,    # org_id or site_id
+                "site_name":            site_name,
+            })
+        return out
+
+    def _fetch_site_wlans(site_id, site_name):
+        try:
+            raw = mist_get(sid, f"/sites/{site_id}/wlans")
+            return _parse_wlans(raw, "site", site_id, site_name)
+        except Exception as e:
+            _log.warning("Site WLAN fetch failed %s: %s", site_id, e)
+            return []
+
+    try:
+        result   = []
+        seen_ids = set()
+
+        # 1. Org-level WLAN templates
+        try:
+            raw = mist_get(sid, f"/orgs/{org_id}/wlans")
+            for w in _parse_wlans(raw, "org", org_id):
+                if w["id"] not in seen_ids:
+                    seen_ids.add(w["id"])
+                    result.append(w)
+        except Exception as e:
+            _log.warning("Org WLAN fetch failed: %s", e)
+
+        # 2. Site-level WLANs — fetch all sites in parallel
+        site_names = _fetch_site_names(sid, org_id)
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {
+                pool.submit(_fetch_site_wlans, sid_val, sname): sid_val
+                for sid_val, sname in site_names.items()
+            }
+            for fut in as_completed(futures):
+                for w in fut.result():
+                    if w["id"] not in seen_ids:
+                        seen_ids.add(w["id"])
+                        result.append(w)
+
+        result.sort(key=lambda w: (w["site_name"].lower(), w["ssid"].lower()))
+
+        # 3. DPC check — scan network templates for dynamic port rules
+        dpc_templates = []
+        def _check_dpc_template(tmpl):
+            tmpl_id = tmpl.get("id")
+            if not tmpl_id:
+                return None
+            try:
+                detail = mist_get(sid, f"/orgs/{org_id}/networktemplates/{tmpl_id}")
+                rules  = detail.get("port_usages", {}).get("dynamic", {}).get("rules", [])
+                if rules:
+                    return {"name": tmpl.get("name", tmpl_id), "rule_count": len(rules)}
+            except Exception:
+                pass
+            return None
+
+        try:
+            raw_tmpls = mist_get(sid, f"/orgs/{org_id}/networktemplates")
+            tmpls     = raw_tmpls if isinstance(raw_tmpls, list) else raw_tmpls.get("results", [])
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                dpc_futures = {pool.submit(_check_dpc_template, t): t for t in tmpls}
+                for fut in as_completed(dpc_futures):
+                    res = fut.result()
+                    if res:
+                        dpc_templates.append(res)
+        except Exception as e:
+            _log.warning("DPC check failed: %s", e)
+
+        dpc_info = {
+            "has_rules":      len(dpc_templates) > 0,
+            "template_count": len(dpc_templates),
+            "rule_count":     sum(t["rule_count"] for t in dpc_templates),
+            "templates":      sorted(dpc_templates, key=lambda t: t["name"].lower()),
+        }
+
+        return jsonify({"wlans": result, "filters": BP_FILTERS, "dpc": dpc_info})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bestpractices/<org_id>/<wlan_id>", methods=["POST"])
+def api_bestpractices_apply(org_id, wlan_id):
+    """Confirm or enable a best-practice filter on one WLAN."""
+    if not valid_uuid(org_id) or not valid_uuid(wlan_id):
+        return jsonify({"error": "Invalid ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    data     = request.json or {}
+    field    = data.get("field", "")
+    scope    = data.get("scope", "org")     # "org" or "site"
+    scope_id = data.get("scope_id", org_id)
+
+    if field not in {f["field"] for f in BP_FILTERS}:
+        return jsonify({"error": f"Unknown field: {field}"}), 400
+    if scope not in ("org", "site"):
+        return jsonify({"error": "Invalid scope"}), 400
+    if scope == "site" and not valid_uuid(scope_id):
+        return jsonify({"error": "Invalid scope_id"}), 400
+
+    # Build API paths based on scope
+    if scope == "site":
+        get_path = f"/sites/{scope_id}/wlans/{wlan_id}"
+        put_path = f"/sites/{scope_id}/wlans/{wlan_id}"
+    else:
+        get_path = f"/orgs/{org_id}/wlans/{wlan_id}"
+        put_path = f"/orgs/{org_id}/wlans/{wlan_id}"
+
+    try:
+        wlan    = mist_get(sid, get_path)
+        current = bool(wlan.get(field, False))
+
+        if current:
+            return jsonify({"status": "already_enabled", "field": field})
+
+        actor = _sessions[sid].get("email", "unknown")
+        _log.info("BESTPRACTICE scope=%s scope_id=%s wlan=%s ssid=%s field=%s actor=%s ip=%s",
+                  scope, scope_id, wlan_id, wlan.get("ssid", ""), field, actor, request.remote_addr)
+
+        r = mist_put(sid, put_path, {field: True})
+        if r.ok:
+            return jsonify({"status": "applied", "field": field})
+        try:
+            detail = r.json().get("detail", r.text[:300])
+        except Exception:
+            detail = r.text[:300]
+        return jsonify({"status": "error", "detail": detail}), r.status_code
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=False, port=5001)

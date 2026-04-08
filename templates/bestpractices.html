@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Best Practices</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #20243a;
+      --border: #2a2d3a; --text: #e8eaf0; --muted: #6b7280;
+      --purple: #7c3aed; --indigo: #4f46e5;
+      --green: #22c55e; --yellow: #f59e0b; --red: #ef4444; --blue: #3b82f6;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--purple), var(--indigo));
+      border-radius: 8px; display: flex; align-items: center;
+      justify-content: center; font-size: 15px; color: #fff;
+    }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .user-name { font-size: 13px; color: var(--muted); }
+    .btn-ghost {
+      font-size: 13px; padding: 6px 14px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+
+    .tab-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; display: flex; align-items: flex-end; gap: 4px;
+      position: sticky; top: 56px; z-index: 19;
+    }
+    .tab {
+      font-size: 13px; font-weight: 500; color: var(--muted);
+      padding: 10px 16px; border-bottom: 2px solid transparent;
+      text-decoration: none; white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+      display: flex; align-items: center; gap: 6px; margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--purple); }
+
+    main { max-width: 1100px; margin: 0 auto; padding: 36px 28px 80px; }
+    .page-title { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .page-sub   { font-size: 14px; color: var(--muted); margin-bottom: 32px; }
+
+    #loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 16px; min-height: 300px; color: var(--muted);
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--purple); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error-banner {
+      display: none; background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3); border-radius: 10px;
+      color: #f87171; padding: 14px 18px; margin-bottom: 24px; font-size: 13px;
+    }
+    #cards { display: none; flex-direction: column; gap: 16px; }
+
+    /* ── Status card ── */
+    .bp-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .bp-card.status-green { border-left: 4px solid var(--green); }
+    .bp-card.status-yellow { border-left: 4px solid var(--yellow); }
+    .bp-card.status-red { border-left: 4px solid var(--red); }
+
+    .bp-card-header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 20px 24px; cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .bp-card-header:hover { background: var(--surface2); }
+
+    .bp-card-icon {
+      width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+    }
+    .bp-card.status-green  .bp-card-icon { background: rgba(34,197,94,0.12);  }
+    .bp-card.status-yellow .bp-card-icon { background: rgba(245,158,11,0.12); }
+    .bp-card.status-red    .bp-card-icon { background: rgba(239,68,68,0.12);  }
+
+    .bp-card-info { flex: 1; min-width: 0; }
+    .bp-card-title { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+    .bp-card-desc  { font-size: 13px; color: var(--muted); }
+
+    .bp-card-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+
+    .bp-score {
+      font-size: 22px; font-weight: 700; line-height: 1;
+    }
+    .bp-card.status-green  .bp-score { color: var(--green);  }
+    .bp-card.status-yellow .bp-score { color: var(--yellow); }
+    .bp-card.status-red    .bp-score { color: var(--red);    }
+
+    .bp-score-label { font-size: 11px; color: var(--muted); margin-top: 2px; text-align: right; }
+
+    .bp-badge {
+      font-size: 11px; font-weight: 700; padding: 4px 12px;
+      border-radius: 99px; white-space: nowrap;
+    }
+    .bp-badge.green  { background: rgba(34,197,94,0.12);  color: var(--green);  border: 1px solid rgba(34,197,94,0.25); }
+    .bp-badge.yellow { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
+    .bp-badge.red    { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+
+    .bp-chevron {
+      color: var(--muted); font-size: 12px;
+      transition: transform 0.2s;
+    }
+    .bp-card.expanded .bp-chevron { transform: rotate(180deg); }
+
+    .bp-card-body {
+      display: none; border-top: 1px solid var(--border);
+      padding: 24px;
+    }
+    .bp-card.expanded .bp-card-body { display: block; }
+
+    /* ── Apply All button ── */
+    .btn-apply-all {
+      font-size: 13px; font-weight: 600; padding: 8px 18px;
+      background: var(--purple); color: #fff; border: none;
+      border-radius: 8px; cursor: pointer; white-space: nowrap;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-apply-all:hover:not(:disabled) { background: #6d28d9; }
+    .btn-apply-all:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── WLAN table ── */
+    .wlan-table-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
+    }
+    .wlan-table-title {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted);
+    }
+    .wlan-table-wrap {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left; padding: 12px 16px;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500;
+      white-space: nowrap;
+    }
+    thead th.filter-col { text-align: center; }
+    tbody tr { transition: background 0.1s; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    tbody td {
+      padding: 13px 16px; border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    td.filter-col { text-align: center; }
+
+    .ssid-name { font-weight: 500; }
+    .ssid-disabled { color: var(--muted); font-style: italic; }
+
+    /* ── Toggle switch ── */
+    .toggle-wrap {
+      display: inline-flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      width: 40px; height: 22px; border-radius: 11px;
+      background: var(--border); cursor: pointer;
+      transition: background 0.2s; position: relative;
+      display: block; flex-shrink: 0;
+    }
+    .toggle-track::after {
+      content: ""; position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; top: 3px; left: 3px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .toggle-input:checked + .toggle-track { background: var(--green); }
+    .toggle-input:checked + .toggle-track::after { transform: translateX(18px); }
+    .toggle-input:disabled + .toggle-track { opacity: 0.4; cursor: not-allowed; }
+
+    .toggle-spinner {
+      width: 20px; height: 20px; border: 2px solid var(--border);
+      border-top-color: var(--purple); border-radius: 50%;
+      animation: spin 0.7s linear infinite; display: none;
+    }
+
+    /* ── Tooltip ── */
+    .th-tooltip {
+      position: relative; cursor: help;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .th-tooltip .tip-icon {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted); font-size: 9px; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .th-tooltip .tip-box {
+      display: none; position: absolute; top: calc(100% + 8px);
+      left: 50%; transform: translateX(-50%);
+      background: #0c0e17; border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 12px; color: var(--text); line-height: 1.5;
+      width: 280px; z-index: 50; text-transform: none; letter-spacing: 0;
+      font-weight: 400; white-space: normal;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .th-tooltip .tip-box::before {
+      content: ""; position: absolute; bottom: 100%; left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent; border-bottom-color: var(--border);
+    }
+    .th-tooltip:hover .tip-box { display: block; }
+
+    /* ── Status pill ── */
+    .status-pill {
+      font-size: 11px; font-weight: 600; padding: 3px 10px;
+      border-radius: 99px; white-space: nowrap;
+    }
+    .status-ok   { background: rgba(34,197,94,0.12);  color: var(--green); }
+    .status-warn { background: rgba(245,158,11,0.12); color: var(--yellow); }
+    .status-bad  { background: rgba(239,68,68,0.12);  color: var(--red); }
+
+    .apply-result {
+      font-size: 12px; margin-top: 4px; display: none;
+    }
+    .apply-result.ok  { color: var(--green); }
+    .apply-result.err { color: var(--red); }
+
+    /* ── DPC content ── */
+    .dpc-info-card {
+      margin-top: 16px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px;
+    }
+    .dpc-info-card h4 {
+      font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text);
+    }
+    .dpc-info-card p {
+      font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 10px;
+    }
+    .dpc-info-card p:last-child { margin-bottom: 0; }
+    .dpc-info-card .highlight { color: #a78bfa; font-weight: 500; }
+    .dpc-nac-note {
+      margin-top: 16px; padding: 12px 16px;
+      background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.2);
+      border-radius: 8px; font-size: 13px; line-height: 1.6; color: var(--text);
+    }
+    .dpc-nac-note a { color: #a78bfa; text-decoration: none; font-weight: 500; }
+    .dpc-nac-note a:hover { text-decoration: underline; }
+    .dpc-templates { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .dpc-tmpl-chip {
+      font-size: 11px; padding: 3px 10px; border-radius: 99px;
+      background: rgba(34,197,94,0.1); color: var(--green);
+      border: 1px solid rgba(34,197,94,0.25);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">&#8644;</div>
+    DPC → NAC Converter
+  </div>
+  <div class="header-right">
+    <span class="user-name">{{ user_name }}</span>
+    <a class="btn-ghost" href="/orgs">&#8592; Orgs</a>
+    <a class="btn-ghost" href="/logout">Sign out</a>
+  </div>
+</header>
+
+<nav class="tab-bar">
+  <a class="tab"        data-tab-id="health"        href="/health/{{ org_id }}">&#128246; Network Health</a>
+  <a class="tab"        data-tab-id="inventory"     href="/inventory/{{ org_id }}">&#128196; Device Inventory</a>
+  <a class="tab"        data-tab-id="troubleshoot"  href="/troubleshoot/{{ org_id }}">&#129658; Troubleshooting</a>
+  <a class="tab active" data-tab-id="bestpractices" href="/bestpractices/{{ org_id }}">&#9989; Best Practices</a>
+  <a class="tab"        data-tab-id="dpc"           href="/scan/{{ org_id }}">&#8644; DPC → NAC</a>
+</nav>
+
+<main>
+  <div class="page-title">Best Practices</div>
+  <div class="page-sub">Configuration health checks for this org &nbsp;<code style="font-size:11px;color:#a78bfa">{{ org_id }}</code></div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Loading configuration checks…</span>
+  </div>
+  <div id="error-banner"></div>
+  <div id="cards"></div>
+</main>
+
+<script>
+const ORG_ID = {{ org_id | tojson }};
+
+let wlanData   = [];
+let filterDefs = [];
+
+// ── Status helpers ─────────────────────────────────────────────────────────────
+
+function cardStatus(enabled, total) {
+  if (total === 0)  return "red";
+  const pct = enabled / total;
+  if (pct >= 1)    return "green";
+  if (pct >= 0.5)  return "yellow";
+  return "red";
+}
+
+function badgeClass(status) {
+  return status; // green / yellow / red
+}
+
+function badgeLabel(status) {
+  if (status === "green")  return "✓ Healthy";
+  if (status === "yellow") return "⚠ Needs Attention";
+  return "✗ Action Required";
+}
+
+function cardIcon(status) {
+  if (status === "green")  return "✓";
+  if (status === "yellow") return "⚠";
+  return "✗";
+}
+
+function wlanScore(w) {
+  return filterDefs.filter(f => w[f.field]).length;
+}
+
+function statusPill(score, total) {
+  if (score === total) return `<span class="status-pill status-ok">✓ All enabled</span>`;
+  if (score === 0)     return `<span class="status-pill status-bad">${total} missing</span>`;
+  return `<span class="status-pill status-warn">${total - score} missing</span>`;
+}
+
+// ── Toggle apply ───────────────────────────────────────────────────────────────
+
+async function applyFilter(wlanId, field, toggleEl, spinnerEl, resultEl) {
+  toggleEl.disabled = true;
+  spinnerEl.style.display = "block";
+  resultEl.style.display  = "none";
+
+  const wlanEntry = wlanData.find(entry => entry.id === wlanId);
+  try {
+    const res  = await fetch(`/api/bestpractices/${ORG_ID}/${wlanId}`, {
+      method:  "POST",
+      headers: {"Content-Type": "application/json"},
+      body:    JSON.stringify({field, scope: wlanEntry?.scope || "org", scope_id: wlanEntry?.scope_id || ORG_ID}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || data.detail || `HTTP ${res.status}`);
+
+    toggleEl.checked  = true;
+    toggleEl.disabled = false;
+    resultEl.className     = "apply-result ok";
+    resultEl.textContent   = data.status === "already_enabled" ? "Already enabled" : "Applied ✓";
+    resultEl.style.display = "block";
+
+    if (wlanEntry) wlanEntry[field] = true;
+    refreshWlanCard();
+    setTimeout(() => { resultEl.style.display = "none"; }, 3000);
+
+  } catch (e) {
+    toggleEl.checked  = false;
+    toggleEl.disabled = false;
+    resultEl.className     = "apply-result err";
+    resultEl.textContent   = `Error: ${e.message}`;
+    resultEl.style.display = "block";
+  } finally {
+    spinnerEl.style.display = "none";
+  }
+}
+
+// ── WLAN card refresh (update header without re-rendering body) ────────────────
+
+function refreshWlanCard() {
+  const total    = wlanData.length;
+  const enabled  = wlanData.reduce((acc, w) => acc + wlanScore(w), 0);
+  const possible = total * filterDefs.length;
+  const compliant = wlanData.filter(w => wlanScore(w) === filterDefs.length).length;
+  const status   = cardStatus(enabled, possible);
+
+  const card = document.getElementById("card-wlan");
+  if (!card) return;
+  card.className = `bp-card expanded status-${status}`;
+  card.querySelector(".bp-score").textContent = `${compliant}/${total}`;
+  card.querySelector(".bp-score-label").textContent = "WLANs compliant";
+  const badge = card.querySelector(".bp-badge");
+  badge.className = `bp-badge ${badgeClass(status)}`;
+  badge.textContent = badgeLabel(status);
+  card.querySelector(".bp-card-icon").textContent = cardIcon(status);
+
+  // Update row status pills
+  wlanData.forEach(w => {
+    const td = document.getElementById(`td-status-${w.id}`);
+    if (td) td.innerHTML = statusPill(wlanScore(w), filterDefs.length);
+  });
+
+  // Update apply-all button
+  const missingCount = wlanData.reduce((acc, w) =>
+    acc + filterDefs.filter(f => !w[f.field]).length, 0);
+  const btn = document.getElementById("apply-all-btn");
+  if (btn) {
+    btn.textContent = missingCount > 0 ? `Apply All Missing (${missingCount})` : "All Applied ✓";
+    btn.disabled = missingCount === 0;
+  }
+}
+
+// ── Render WLAN card ───────────────────────────────────────────────────────────
+
+function renderWlanCard() {
+  const total    = wlanData.length;
+  const enabled  = wlanData.reduce((acc, w) => acc + wlanScore(w), 0);
+  const possible = total * filterDefs.length;
+  const compliant = wlanData.filter(w => wlanScore(w) === filterDefs.length).length;
+  const status   = cardStatus(enabled, possible);
+  const missing  = wlanData.reduce((acc, w) =>
+    acc + filterDefs.filter(f => !w[f.field]).length, 0);
+
+  // Table
+  let tableHtml = "";
+  if (total === 0) {
+    tableHtml = `<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
+      No WLANs found. Ensure your API token has read access to org and site WLANs.
+    </div>`;
+  } else {
+    let thead = `<thead><tr><th>SSID</th><th>Scope</th>`;
+    filterDefs.forEach(f => {
+      thead += `<th class="filter-col"><div class="th-tooltip">${f.label}
+        <span class="tip-icon">?</span>
+        <div class="tip-box">${f.tooltip}</div></div></th>`;
+    });
+    thead += `<th>Status</th></tr></thead>`;
+
+    let tbody = "<tbody>";
+    wlanData.forEach(w => {
+      const score   = wlanScore(w);
+      const nameCls = w.enabled ? "ssid-name" : "ssid-name ssid-disabled";
+      const scopeLbl = w.scope === "site"
+        ? `<span style="font-size:12px;color:var(--muted)">${w.site_name || w.scope_id}</span>`
+        : `<span style="font-size:12px;color:var(--muted)">Org template</span>`;
+      tbody += `<tr><td class="${nameCls}">${w.ssid}${!w.enabled ? " (disabled)" : ""}</td><td>${scopeLbl}</td>`;
+      filterDefs.forEach(f => {
+        const checked  = w[f.field] ? "checked" : "";
+        const toggleId = `tog-${w.id}-${f.field}`;
+        const spinId   = `spin-${w.id}-${f.field}`;
+        const resId    = `res-${w.id}-${f.field}`;
+        tbody += `<td class="filter-col">
+          <label class="toggle-wrap">
+            <input class="toggle-input" type="checkbox" id="${toggleId}" ${checked}
+                   data-wlan="${w.id}" data-field="${f.field}">
+            <span class="toggle-track"></span>
+          </label>
+          <div class="toggle-spinner" id="${spinId}"></div>
+          <div class="apply-result" id="${resId}"></div>
+        </td>`;
+      });
+      tbody += `<td id="td-status-${w.id}">${statusPill(score, filterDefs.length)}</td></tr>`;
+    });
+    tbody += "</tbody>";
+    tableHtml = `<div class="wlan-table-wrap"><table>${thead}${tbody}</table></div>`;
+  }
+
+  const applyBtn = missing > 0
+    ? `<button class="btn-apply-all" id="apply-all-btn">Apply All Missing (${missing})</button>`
+    : `<button class="btn-apply-all" id="apply-all-btn" disabled>All Applied ✓</button>`;
+
+  const bodyHtml = `
+    <div class="wlan-table-header">
+      <div class="wlan-table-title">${total} WLAN${total !== 1 ? "s" : ""} — ${filterDefs.length} checks each</div>
+      ${applyBtn}
+    </div>
+    ${tableHtml}`;
+
+  const card = document.createElement("div");
+  card.className = `bp-card status-${status}`;
+  card.id = "card-wlan";
+  card.innerHTML = `
+    <div class="bp-card-header">
+      <div class="bp-card-icon">${cardIcon(status)}</div>
+      <div class="bp-card-info">
+        <div class="bp-card-title">WLAN Filters</div>
+        <div class="bp-card-desc">ARP filter, broadcast/multicast filter, limit probe response</div>
+      </div>
+      <div class="bp-card-right">
+        <div>
+          <div class="bp-score">${compliant}/${total}</div>
+          <div class="bp-score-label">WLANs compliant</div>
+        </div>
+        <span class="bp-badge ${badgeClass(status)}">${badgeLabel(status)}</span>
+        <span class="bp-chevron">▼</span>
+      </div>
+    </div>
+    <div class="bp-card-body">${bodyHtml}</div>`;
+
+  document.getElementById("cards").appendChild(card);
+
+  // Toggle expand on header click
+  card.querySelector(".bp-card-header").addEventListener("click", () => {
+    card.classList.toggle("expanded");
+  });
+
+  // Wire toggles
+  card.querySelectorAll(".toggle-input").forEach(inp => {
+    inp.addEventListener("change", async e => {
+      if (!e.target.checked) { e.target.checked = true; return; }
+      const wlanId  = e.target.dataset.wlan;
+      const field   = e.target.dataset.field;
+      const spinEl  = document.getElementById(`spin-${wlanId}-${field}`);
+      const resEl   = document.getElementById(`res-${wlanId}-${field}`);
+      await applyFilter(wlanId, field, e.target, spinEl, resEl);
+    });
+  });
+
+  // Apply All button
+  const applyAllBtn = document.getElementById("apply-all-btn");
+  if (applyAllBtn) {
+    applyAllBtn.addEventListener("click", async () => {
+      applyAllBtn.disabled = true;
+      applyAllBtn.textContent = "Applying…";
+      const tasks = [];
+      wlanData.forEach(w => {
+        filterDefs.forEach(f => {
+          if (!w[f.field]) {
+            const toggleEl = document.getElementById(`tog-${w.id}-${f.field}`);
+            const spinEl   = document.getElementById(`spin-${w.id}-${f.field}`);
+            const resEl    = document.getElementById(`res-${w.id}-${f.field}`);
+            if (toggleEl) tasks.push(applyFilter(w.id, f.field, toggleEl, spinEl, resEl));
+          }
+        });
+      });
+      await Promise.allSettled(tasks);
+      applyAllBtn.textContent = "Done ✓";
+      setTimeout(() => { applyAllBtn.textContent = "All Applied ✓"; }, 2000);
+    });
+  }
+}
+
+// ── Render DPC card ────────────────────────────────────────────────────────────
+
+function renderDpcCard(dpc) {
+  const hasRules = dpc && dpc.has_rules;
+  const status   = hasRules ? "green" : "red";
+
+  let bodyHtml;
+  if (hasRules) {
+    const chips = (dpc.templates || [])
+      .map(t => `<span class="dpc-tmpl-chip">✓ ${t.name} (${t.rule_count} rule${t.rule_count !== 1 ? "s" : ""})</span>`)
+      .join("");
+    bodyHtml = `
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px">
+        ${dpc.rule_count} rule${dpc.rule_count !== 1 ? "s" : ""} configured across
+        ${dpc.template_count} network template${dpc.template_count !== 1 ? "s" : ""}.
+        Dynamic Port Configuration will auto-assign port profiles based on connected device identity.
+      </p>
+      ${chips ? `<div class="dpc-templates">${chips}</div>` : ""}
+      <div class="dpc-nac-note" style="margin-top:16px">
+        &#128274;&nbsp; <strong>Ready to harden your network?</strong>
+        Once your deployment is stable, use the
+        <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
+        to migrate dynamic rules to proper NAC policies — replacing device-identity-based
+        port assignment with certificate or credential-based authentication.
+      </div>`;
+  } else {
+    bodyHtml = `
+      <div class="dpc-info-card">
+        <h4>What is Dynamic Port Configuration?</h4>
+        <p>
+          <span class="highlight">Dynamic Port Configuration (DPC)</span> automatically assigns
+          the correct switch port profile to a connected device based on its identity —
+          using MAC OUI or LLDP system name to recognise device types like IP phones,
+          cameras, printers, and APs.
+        </p>
+        <p>
+          Instead of manually configuring each port before a device is plugged in, DPC lets you
+          <span class="highlight">deploy switches immediately</span> and have the right VLAN,
+          PoE policy, and port settings applied the moment a device connects — dramatically
+          reducing on-site configuration time.
+        </p>
+        <p>
+          DPC rules are configured in your <strong style="color:var(--text)">Network Templates</strong>
+          under <em>Port Configuration → Dynamic</em>.
+        </p>
+      </div>
+      <div class="dpc-nac-note">
+        &#128161;&nbsp; <strong>Deployment tip:</strong>
+        Configure DPC rules to get your network up quickly without manual port-by-port setup.
+        Once the network is stable, use the
+        <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
+        to convert dynamic rules into proper <strong style="color:var(--text)">NAC policies</strong>
+        for a secure, production-ready network.
+      </div>`;
+  }
+
+  const scoreText  = hasRules ? `${dpc.rule_count} rule${dpc.rule_count !== 1 ? "s" : ""}` : "Not configured";
+  const scoreLabel = hasRules ? "across " + dpc.template_count + " template" + (dpc.template_count !== 1 ? "s" : "") : "No DPC rules found";
+
+  const card = document.createElement("div");
+  card.className = `bp-card status-${status}`;  /* starts collapsed */
+  card.id = "card-dpc";
+  card.innerHTML = `
+    <div class="bp-card-header">
+      <div class="bp-card-icon">${cardIcon(status)}</div>
+      <div class="bp-card-info">
+        <div class="bp-card-title">Dynamic Port Configuration</div>
+        <div class="bp-card-desc">Auto-assign port profiles based on connected device identity</div>
+      </div>
+      <div class="bp-card-right">
+        <div>
+          <div class="bp-score">${scoreText}</div>
+          <div class="bp-score-label">${scoreLabel}</div>
+        </div>
+        <span class="bp-badge ${badgeClass(status)}">${badgeLabel(status)}</span>
+        <span class="bp-chevron">▼</span>
+      </div>
+    </div>
+    <div class="bp-card-body">${bodyHtml}</div>`;
+
+  document.getElementById("cards").appendChild(card);
+
+  card.querySelector(".bp-card-header").addEventListener("click", () => {
+    card.classList.toggle("expanded");
+  });
+}
+
+// ── Load ───────────────────────────────────────────────────────────────────────
+
+async function load() {
+  const loadEl  = document.getElementById("loading");
+  const errEl   = document.getElementById("error-banner");
+  const cardsEl = document.getElementById("cards");
+
+  loadEl.style.display  = "flex";
+  cardsEl.style.display = "none";
+  errEl.style.display   = "none";
+
+  try {
+    const res  = await fetch(`/api/bestpractices/${ORG_ID}`);
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.error === "Not authenticated") { window.location.href = "/login"; return; }
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    wlanData   = data.wlans   || [];
+    filterDefs = data.filters || [];
+
+    loadEl.style.display  = "none";
+    cardsEl.style.display = "flex";
+    cardsEl.innerHTML     = "";
+
+    renderWlanCard();
+    renderDpcCard(data.dpc || {});
+
+  } catch (err) {
+    loadEl.style.display = "none";
+    errEl.style.display  = "block";
+    errEl.textContent    = `Error: ${err.message}`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

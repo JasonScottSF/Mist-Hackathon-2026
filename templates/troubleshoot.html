@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Troubleshooting</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #20243a;
+      --border: #2a2d3a; --text: #e8eaf0; --muted: #6b7280;
+      --purple: #7c3aed; --indigo: #4f46e5;
+      --green: #22c55e; --yellow: #f59e0b; --red: #ef4444; --blue: #3b82f6;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--purple), var(--indigo));
+      border-radius: 8px; display: flex; align-items: center;
+      justify-content: center; font-size: 15px; color: #fff;
+    }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .user-name { font-size: 13px; color: var(--muted); }
+    .btn-ghost {
+      font-size: 13px; padding: 6px 14px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+
+    .tab-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; display: flex; align-items: flex-end; gap: 4px;
+      position: sticky; top: 56px; z-index: 19;
+    }
+    .tab {
+      font-size: 13px; font-weight: 500; color: var(--muted);
+      padding: 10px 16px; border-bottom: 2px solid transparent;
+      text-decoration: none; white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+      display: flex; align-items: center; gap: 6px; margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--purple); }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 36px 28px 80px; }
+    .page-title { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .page-sub   { font-size: 14px; color: var(--muted); margin-bottom: 32px; }
+
+    #loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 16px; min-height: 300px; color: var(--muted);
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--purple); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error-banner {
+      display: none; background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3); border-radius: 10px;
+      color: #f87171; padding: 14px 18px; margin-bottom: 24px; font-size: 13px;
+    }
+    #content { display: none; }
+
+    .section { margin-bottom: 40px; }
+    .section-title {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted);
+      display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+    }
+    .section-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+    /* ── SLE Trend Chart ── */
+    .chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px 24px;
+    }
+    .chart-legend {
+      display: flex; gap: 20px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    .legend-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    #trend-chart { width: 100%; overflow: hidden; }
+
+    /* Chart no-data */
+    .chart-empty {
+      text-align: center; padding: 40px; color: var(--muted); font-size: 13px;
+    }
+
+    /* ── Alarm tables ── */
+    .alarm-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .alarm-header-row {
+      display: grid; grid-template-columns: 90px 1fr 160px 80px;
+      gap: 12px; padding: 9px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .alarm-header-row span {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); font-weight: 500;
+    }
+    .alarm-row {
+      display: grid; grid-template-columns: 90px 1fr 160px 80px;
+      gap: 12px; align-items: center;
+      padding: 11px 18px; border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .alarm-row:last-child { border-bottom: none; }
+    .alarm-row:hover { background: var(--surface2); }
+    .sev-pill {
+      font-size: 11px; font-weight: 600; padding: 3px 8px;
+      border-radius: 4px; text-align: center; white-space: nowrap;
+    }
+    .sev-critical { background: rgba(239,68,68,0.15);  color: var(--red); }
+    .sev-major    { background: rgba(249,115,22,0.15); color: #f97316; }
+    .sev-minor    { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .sev-info     { background: rgba(59,130,246,0.15); color: var(--blue); }
+    .alarm-title  { font-weight: 500; color: var(--text); }
+    .alarm-meta   { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .meta-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--surface2); border-radius: 4px;
+      padding: 1px 6px; font-size: 11px; color: var(--muted);
+    }
+    .alarm-site  { font-size: 12px; color: var(--muted); }
+    .alarm-count { font-size: 12px; color: var(--muted); text-align: right; }
+    .empty-state { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    .count-badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 99px;
+      font-weight: 600; margin-left: 6px;
+    }
+    .count-badge.open     { background: rgba(239,68,68,0.15);  color: var(--red); }
+    .count-badge.resolved { background: rgba(34,197,94,0.15);  color: var(--green); }
+
+    .last-updated { font-size: 12px; color: var(--muted); margin-bottom: 24px; }
+
+    /* ── Client Troubleshooter ── */
+    .tshoot-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px 24px;
+    }
+    .tshoot-row {
+      display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;
+    }
+    .search-wrap {
+      position: relative; flex: 1; min-width: 260px;
+    }
+    .search-wrap input[type="text"] {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 13px;
+      padding: 9px 36px 9px 12px; outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-wrap input[type="text"]:focus { border-color: var(--purple); }
+    .search-wrap input[type="text"]::placeholder { color: var(--muted); }
+    .search-clear {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      color: var(--muted); cursor: pointer; font-size: 15px; display: none;
+      background: none; border: none; line-height: 1; padding: 0;
+    }
+    .search-clear:hover { color: var(--text); }
+    .client-dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; max-height: 280px; overflow-y: auto;
+      z-index: 200; display: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .client-dropdown.open { display: block; }
+    .client-opt {
+      padding: 9px 14px; cursor: pointer; border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    .client-opt:last-child { border-bottom: none; }
+    .client-opt:hover, .client-opt.focused { background: var(--surface); }
+    .client-opt-name { font-size: 13px; font-weight: 500; color: var(--text); }
+    .client-opt-meta { font-size: 11px; color: var(--muted); margin-top: 1px;
+                       display: flex; gap: 10px; flex-wrap: wrap; }
+    .client-opt-meta span { font-family: ui-monospace, monospace; }
+    .dropdown-msg { padding: 14px; text-align: center; color: var(--muted);
+                    font-size: 13px; }
+
+    .btn-run {
+      padding: 9px 20px; background: var(--purple); color: #fff;
+      border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-run:hover:not(:disabled) { background: #6d28d9; }
+    .btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #tshoot-result { margin-top: 20px; display: none; }
+    .result-client-bar {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+      padding: 10px 14px; background: var(--surface2); border-radius: 8px;
+      font-size: 13px;
+    }
+    .result-client-bar .r-mac { font-family: ui-monospace,monospace; color: var(--muted); font-size: 12px; }
+
+    .tshoot-items { display: flex; flex-direction: column; gap: 12px; }
+    .tshoot-item {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .tshoot-item.ok      { border-left: 3px solid var(--green); }
+    .tshoot-item.warn    { border-left: 3px solid var(--yellow); }
+    .tshoot-item.fail    { border-left: 3px solid var(--red); }
+    .tshoot-item.info    { border-left: 3px solid var(--blue); }
+    .tshoot-category {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--muted); margin-bottom: 6px;
+    }
+    .tshoot-reason { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .tshoot-desc   { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
+    .tshoot-rec {
+      font-size: 12px; color: #a78bfa;
+      padding: 8px 12px; background: rgba(124,58,237,0.08);
+      border-radius: 6px; line-height: 1.5;
+    }
+    .tshoot-rec::before { content: "💡 "; }
+    .tshoot-ok-msg {
+      display: flex; align-items: center; gap: 10px;
+      color: var(--green); font-size: 14px; font-weight: 500;
+    }
+    .tshoot-raw {
+      font-family: ui-monospace,monospace; font-size: 12px; color: var(--muted);
+      white-space: pre-wrap; word-break: break-all;
+      background: var(--surface2); border-radius: 8px; padding: 14px;
+      border: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">&#8644;</div>
+    DPC → NAC Converter
+  </div>
+  <div class="header-right">
+    <span class="user-name">{{ user_name }}</span>
+    <a class="btn-ghost" href="/orgs">&#8592; Orgs</a>
+    <a class="btn-ghost" href="/logout">Sign out</a>
+  </div>
+</header>
+
+<nav class="tab-bar">
+  <a class="tab"        data-tab-id="health"       href="/health/{{ org_id }}">&#128246; Network Health</a>
+  <a class="tab"        data-tab-id="inventory"    href="/inventory/{{ org_id }}">&#128196; Device Inventory</a>
+  <a class="tab active" data-tab-id="troubleshoot"  href="/troubleshoot/{{ org_id }}">&#129658; Troubleshooting</a>
+  <a class="tab"        data-tab-id="bestpractices" href="/bestpractices/{{ org_id }}">&#9989; Best Practices</a>
+  <a class="tab"        data-tab-id="dpc"            href="/scan/{{ org_id }}">&#8644; DPC → NAC</a>
+</nav>
+
+<main>
+  <div class="page-title">Troubleshooting</div>
+  <div class="page-sub">SLE trends, Marvis actions, and AI validated events &nbsp;
+    <code style="font-size:11px;color:#a78bfa">{{ org_id }}</code>
+  </div>
+
+  <!-- Client Troubleshooter — always visible, loads independently -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-dot" style="background:var(--indigo)"></span>
+      Client Troubleshooter
+    </div>
+    <div class="tshoot-card">
+      <div class="tshoot-row">
+        <div class="search-wrap" id="search-wrap">
+          <input type="text" id="client-search"
+                 placeholder="Search by hostname, username, or MAC…"
+                 autocomplete="off" spellcheck="false">
+          <button class="search-clear" id="search-clear-btn" title="Clear">&#x2715;</button>
+          <div class="client-dropdown" id="client-dropdown">
+            <div class="dropdown-msg" id="dropdown-msg">Start typing to search clients…</div>
+          </div>
+        </div>
+        <button class="btn-run" id="run-tshoot-btn" disabled>Run Troubleshoot</button>
+      </div>
+      <div id="tshoot-result"></div>
+    </div>
+  </div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Fetching troubleshooting data…</span>
+  </div>
+  <div id="error-banner"></div>
+  <div id="content"></div>
+</main>
+
+<script>
+const ORG_ID = {{ org_id | tojson }};
+
+const SKIP_KEYS = new Set(["site_id","num_aps","num_clients","num_switches","num_gateways"]);
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function sevClass(sev) {
+  const s = (sev || "").toLowerCase();
+  if (s === "critical") return "sev-critical";
+  if (s === "major")    return "sev-major";
+  if (s === "minor")    return "sev-minor";
+  return "sev-info";
+}
+
+function timeAgo(epochSec) {
+  if (!epochSec) return "—";
+  const diff = Math.floor(Date.now() / 1000) - epochSec;
+  if (diff < 60)    return `${diff}s ago`;
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function fmtDate(epochSec) {
+  if (!epochSec) return "—";
+  return new Date(epochSec * 1000).toLocaleString();
+}
+
+function dayLabels(tsStart, nDays) {
+  const labels = [];
+  const days   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  for (let i = 0; i < nDays; i++) {
+    const d = new Date((tsStart + i * 86400) * 1000);
+    labels.push(`${days[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`);
+  }
+  return labels;
+}
+
+// ── SVG Line Chart ─────────────────────────────────────────────────────────────
+
+function buildChart(container, datasets, xLabels) {
+  const W  = container.offsetWidth || 700;
+  const H  = 220;
+  const ml = 46, mr = 16, mt = 16, mb = 36;
+  const pw = W - ml - mr;
+  const ph = H - mt - mb;
+  const n  = xLabels.length;
+  if (n < 2) {
+    container.innerHTML = `<div class="chart-empty">Not enough data for trend chart.</div>`;
+    return;
+  }
+
+  const xS = i => ml + (i / (n - 1)) * pw;
+  const yS = v => mt + ph - (v / 100) * ph;
+
+  const COLORS = { wifi: "#3b82f6", wired: "#22c55e", wan: "#f59e0b" };
+  const GRID   = [0, 25, 50, 75, 100];
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
+    style="width:100%;height:${H}px;display:block">`;
+
+  // Grid lines + Y labels
+  for (const pct of GRID) {
+    const y = yS(pct);
+    svg += `<line x1="${ml}" y1="${y}" x2="${ml+pw}" y2="${y}"
+              stroke="#2a2d3a" stroke-width="1"/>`;
+    svg += `<text x="${ml-6}" y="${y+4}" text-anchor="end"
+              fill="#6b7280" font-size="10" font-family="system-ui,sans-serif">${pct}%</text>`;
+  }
+
+  // X labels
+  xLabels.forEach((lbl, i) => {
+    const x = xS(i);
+    svg += `<text x="${x}" y="${H-4}" text-anchor="middle"
+              fill="#6b7280" font-size="10" font-family="system-ui,sans-serif">${lbl}</text>`;
+  });
+
+  // Area fills + lines + dots
+  for (const { name, values } of datasets) {
+    const color  = COLORS[name] || "#a78bfa";
+    const points = values.map((v, i) => (v !== null ? [xS(i), yS(v)] : null));
+
+    // Draw contiguous segments (skip nulls)
+    let segStart = null;
+    const segments = [];
+    for (let i = 0; i <= points.length; i++) {
+      if (i < points.length && points[i]) {
+        if (segStart === null) segStart = i;
+      } else {
+        if (segStart !== null) {
+          segments.push(points.slice(segStart, i).filter(Boolean));
+          segStart = null;
+        }
+      }
+    }
+
+    for (const seg of segments) {
+      if (seg.length < 2) continue;
+      // Filled area (subtle)
+      const areaD = `M ${seg[0][0]} ${yS(0)} `
+        + seg.map(([x, y]) => `L ${x} ${y}`).join(" ")
+        + ` L ${seg[seg.length-1][0]} ${yS(0)} Z`;
+      svg += `<path d="${areaD}" fill="${color}" fill-opacity="0.07"/>`;
+      // Line
+      const lineD = seg.map(([x, y], i) => `${i===0?"M":"L"} ${x} ${y}`).join(" ");
+      svg += `<path d="${lineD}" fill="none" stroke="${color}"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+      // Dots
+      for (const [x, y] of seg) {
+        svg += `<circle cx="${x}" cy="${y}" r="3" fill="${color}"/>`;
+      }
+    }
+  }
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+// ── Alarm tables ──────────────────────────────────────────────────────────────
+
+function renderAlarmTable(alarms, showResolvedTime) {
+  if (!alarms.length) {
+    return `<div class="empty-state">✓ None found.</div>`;
+  }
+  const colLabel4 = showResolvedTime ? "Resolved" : "Count";
+  const rows = alarms.map(a => {
+    const hosts   = (a.hostnames || []).slice(0, 3).join(", ");
+    const chips   = [
+      hosts       ? `<span class="meta-chip">📍 ${hosts}</span>` : "",
+    ].filter(Boolean).join("");
+    const col4 = showResolvedTime
+      ? `<span title="${fmtDate(a.resolved_time)}">${timeAgo(a.resolved_time)}</span>`
+      : (a.count > 1 ? `×${a.count}` : "");
+    return `
+      <div class="alarm-row">
+        <span class="sev-pill ${sevClass(a.severity)}">${a.severity || "info"}</span>
+        <div>
+          <div class="alarm-title">${a.title || "Event"}</div>
+          ${chips ? `<div class="alarm-meta">${chips}</div>` : ""}
+        </div>
+        <div class="alarm-site">
+          ${a.site_name || ""}
+          <br><span style="font-size:11px">${timeAgo(a.timestamp)}</span>
+        </div>
+        <div class="alarm-count">${col4}</div>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="alarm-header-row">
+      <span>Severity</span><span>Event</span><span>Site / When</span>
+      <span>${showResolvedTime ? "Resolved" : "Count"}</span>
+    </div>` + rows;
+}
+
+// ── Client Troubleshooter ─────────────────────────────────────────────────────
+
+let allClients   = [];
+let clientsReady = false;
+let selectedClient = null;  // {mac, hostname, site_id}
+
+const searchInput  = document.getElementById("client-search");
+const clearBtn     = document.getElementById("search-clear-btn");
+const dropdown     = document.getElementById("client-dropdown");
+const dropdownMsg  = document.getElementById("dropdown-msg");
+const runBtn       = document.getElementById("run-tshoot-btn");
+const resultDiv    = document.getElementById("tshoot-result");
+
+// Load clients list (called once, lazily on first focus)
+async function loadClients() {
+  if (clientsReady) return;
+  clientsReady = true;
+  dropdownMsg.textContent = "Loading clients…";
+  try {
+    const res  = await fetch(`/api/clients/${ORG_ID}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    allClients = data.clients || [];
+    dropdownMsg.textContent = allClients.length
+      ? `${allClients.length} clients — type to filter`
+      : "No active clients found in the last 24 hours.";
+  } catch (e) {
+    dropdownMsg.textContent = `Failed to load clients: ${e.message}`;
+    clientsReady = false;  // allow retry
+  }
+}
+
+function clientLabel(c) {
+  if (c.hostname && c.username && c.hostname !== c.username)
+    return `${c.hostname} (${c.username})`;
+  return c.hostname || c.username || c.mac;
+}
+
+function renderDropdown(query) {
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? allClients.filter(c =>
+        (c.hostname  || "").toLowerCase().includes(q) ||
+        (c.username  || "").toLowerCase().includes(q) ||
+        (c.mac       || "").toLowerCase().includes(q) ||
+        (c.ip        || "").toLowerCase().includes(q)
+      )
+    : allClients;
+
+  // Clear existing options (keep the msg node)
+  while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
+
+  if (!allClients.length) {
+    const m = document.createElement("div");
+    m.className = "dropdown-msg";
+    m.textContent = dropdownMsg.textContent;
+    dropdown.appendChild(m);
+    return;
+  }
+
+  if (!matches.length) {
+    const m = document.createElement("div");
+    m.className = "dropdown-msg";
+    m.textContent = "No clients match your search.";
+    dropdown.appendChild(m);
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  matches.slice(0, 80).forEach(c => {
+    const opt = document.createElement("div");
+    opt.className = "client-opt";
+    opt.dataset.mac    = c.mac;
+    opt.dataset.siteId = c.site_id || "";
+    opt.innerHTML = `
+      <div class="client-opt-name">${clientLabel(c)}</div>
+      <div class="client-opt-meta">
+        <span>${c.mac}</span>
+        ${c.ip   ? `<span>${c.ip}</span>`   : ""}
+        ${c.ssid ? `<span>&#128246; ${c.ssid}</span>` : ""}
+        ${c.os   ? `<span>${c.os}</span>`   : ""}
+      </div>`;
+    opt.addEventListener("mousedown", e => {
+      e.preventDefault();  // prevent blur before click fires
+      selectClient(c, opt);
+    });
+    frag.appendChild(opt);
+  });
+  dropdown.appendChild(frag);
+}
+
+function selectClient(c, optEl) {
+  selectedClient = c;
+  searchInput.value = clientLabel(c);
+  clearBtn.style.display = "block";
+  runBtn.disabled = false;
+  dropdown.classList.remove("open");
+  // highlight selected
+  dropdown.querySelectorAll(".client-opt").forEach(o => o.classList.remove("focused"));
+  if (optEl) optEl.classList.add("focused");
+}
+
+function clearSelection() {
+  selectedClient = null;
+  searchInput.value = "";
+  clearBtn.style.display = "none";
+  runBtn.disabled = true;
+  resultDiv.style.display = "none";
+  dropdown.classList.remove("open");
+}
+
+searchInput.addEventListener("focus", async () => {
+  await loadClients();
+  renderDropdown(searchInput.value);
+  dropdown.classList.add("open");
+});
+
+searchInput.addEventListener("input", () => {
+  selectedClient = null;
+  runBtn.disabled = true;
+  clearBtn.style.display = searchInput.value ? "block" : "none";
+  renderDropdown(searchInput.value);
+  dropdown.classList.add("open");
+});
+
+searchInput.addEventListener("keydown", e => {
+  const opts = [...dropdown.querySelectorAll(".client-opt")];
+  const cur  = dropdown.querySelector(".client-opt.focused");
+  let idx    = opts.indexOf(cur);
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    idx = Math.min(idx + 1, opts.length - 1);
+    opts.forEach(o => o.classList.remove("focused"));
+    if (opts[idx]) opts[idx].classList.add("focused");
+    opts[idx]?.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    idx = Math.max(idx - 1, 0);
+    opts.forEach(o => o.classList.remove("focused"));
+    if (opts[idx]) opts[idx].classList.add("focused");
+    opts[idx]?.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter") {
+    if (cur) {
+      const c = allClients.find(c => c.mac === cur.dataset.mac);
+      if (c) selectClient(c, cur);
+    }
+  } else if (e.key === "Escape") {
+    dropdown.classList.remove("open");
+  }
+});
+
+searchInput.addEventListener("blur", () => {
+  setTimeout(() => dropdown.classList.remove("open"), 150);
+});
+
+clearBtn.addEventListener("click", clearSelection);
+
+// Click outside to close
+document.addEventListener("click", e => {
+  if (!document.getElementById("search-wrap").contains(e.target))
+    dropdown.classList.remove("open");
+});
+
+// ── Troubleshoot result rendering ─────────────────────────────────────────────
+
+function severityClass(sev) {
+  const s = (sev || "").toLowerCase();
+  if (s.includes("fail") || s.includes("error") || s.includes("bad")) return "fail";
+  if (s.includes("warn"))  return "warn";
+  if (s.includes("ok") || s.includes("pass") || s.includes("good")) return "ok";
+  return "info";
+}
+
+function renderTroubleshootResult(data, clientInfo) {
+  const label = clientLabel(clientInfo);
+  let html = `
+    <div class="result-client-bar">
+      <strong>${label}</strong>
+      <span class="r-mac">${clientInfo.mac}</span>
+      ${clientInfo.ip ? `<span style="color:var(--muted);font-size:12px">${clientInfo.ip}</span>` : ""}
+    </div>`;
+
+  // API may return {results: [...]} or a flat object or an array
+  let items = [];
+  if (Array.isArray(data))              items = data;
+  else if (Array.isArray(data.results)) items = data.results;
+  else if (data.category || data.reason || data.text) items = [data];
+
+  if (!items.length) {
+    // Try to show whatever came back
+    const raw = JSON.stringify(data, null, 2);
+    html += `<div class="tshoot-ok-msg">&#10003;&nbsp; No issues found by Marvis for this client.</div>
+             <details style="margin-top:12px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">Raw response</summary>
+             <div class="tshoot-raw">${raw}</div></details>`;
+  } else {
+    html += `<div class="tshoot-items">`;
+    for (const item of items) {
+      const cat  = item.category || item.type || "";
+      const reason = item.reason || item.title || item.text || "";
+      const desc   = item.description || item.detail || "";
+      const rec    = item.recommendation || item.resolution || "";
+      const sev    = item.severity || item.status || "";
+      const cls    = severityClass(sev || cat || reason);
+      html += `
+        <div class="tshoot-item ${cls}">
+          ${cat ? `<div class="tshoot-category">${cat}</div>` : ""}
+          ${reason ? `<div class="tshoot-reason">${reason}</div>` : ""}
+          ${desc   ? `<div class="tshoot-desc">${desc}</div>` : ""}
+          ${rec    ? `<div class="tshoot-rec">${rec}</div>` : ""}
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  resultDiv.innerHTML = html;
+  resultDiv.style.display = "block";
+}
+
+runBtn.addEventListener("click", async () => {
+  if (!selectedClient) return;
+  runBtn.disabled  = true;
+  runBtn.textContent = "Running…";
+  resultDiv.style.display = "none";
+
+  try {
+    let url = `/api/troubleshoot-client/${ORG_ID}?mac=${encodeURIComponent(selectedClient.mac)}`;
+    if (selectedClient.site_id) url += `&site_id=${encodeURIComponent(selectedClient.site_id)}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderTroubleshootResult(data, selectedClient);
+  } catch (e) {
+    resultDiv.innerHTML = `<div style="color:var(--red);font-size:13px;padding:12px 0">&#9888; Error: ${e.message}</div>`;
+    resultDiv.style.display = "block";
+  } finally {
+    runBtn.disabled  = false;
+    runBtn.textContent = "Run Troubleshoot";
+  }
+});
+
+// ── Main load ─────────────────────────────────────────────────────────────────
+
+async function load() {
+  const loadEl = document.getElementById("loading");
+  const errEl  = document.getElementById("error-banner");
+  const contEl = document.getElementById("content");
+
+  loadEl.style.display = "flex";
+  contEl.style.display = "none";
+  errEl.style.display  = "none";
+
+  try {
+    const res  = await fetch(`/api/troubleshoot/${ORG_ID}`);
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.error === "Not authenticated") { window.location.href = "/login"; return; }
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    const tsStart  = data.ts_start;
+    const tsEnd    = data.ts_end;
+    const trends   = data.trends   || {};
+    const openActs = data.marvis_open     || [];
+    const resolved = data.marvis_resolved || [];
+
+    // Compute number of days
+    const N_DAYS  = 7;
+    const xLabels = dayLabels(tsStart, N_DAYS);
+
+    // trends is already {wifi: [avg0..avg6], wired: [...], wan: [...]}
+    console.log("[Troubleshoot] trends from API:", JSON.stringify(trends));
+
+    const datasets = Object.entries(trends)
+      .map(([cat, avgs]) => ({ name: cat, values: avgs || [] }))
+      .filter(d => d.values.length > 0);
+
+    contEl.innerHTML = `
+      <div class="last-updated">Last updated: ${new Date().toLocaleTimeString()}</div>
+
+      <div class="section">
+        <div class="section-title">
+          <span class="section-dot" style="background:var(--purple)"></span>
+          SLE Trends — 7 Days
+        </div>
+        <div class="chart-card">
+          <div class="chart-legend">
+            <div class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>WiFi</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>Wired</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>WAN</div>
+          </div>
+          <div id="trend-chart"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span class="section-dot" style="background:var(--red)"></span>
+          Marvis Actions
+          ${openActs.length ? `<span class="count-badge open">${openActs.length} active</span>` : ""}
+        </div>
+        <div class="alarm-box">${renderAlarmTable(openActs, false)}</div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span class="section-dot" style="background:var(--green)"></span>
+          AI Validated Events
+          ${resolved.length ? `<span class="count-badge resolved">${resolved.length} resolved</span>` : ""}
+        </div>
+        <div class="alarm-box">${renderAlarmTable(resolved, true)}</div>
+      </div>`;
+
+    loadEl.style.display = "none";
+    contEl.style.display = "block";
+
+    // Render chart after DOM is visible
+    requestAnimationFrame(() => {
+      const chartEl = document.getElementById("trend-chart");
+      if (chartEl) buildChart(chartEl, datasets, xLabels);
+    });
+
+  } catch (err) {
+    loadEl.style.display = "none";
+    errEl.style.display  = "block";
+    errEl.textContent    = `Error loading troubleshooting data: ${err.message}`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
