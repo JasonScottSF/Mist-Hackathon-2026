@@ -1467,7 +1467,108 @@ def api_bestpractices(org_id):
             "templates":      sorted(dpc_templates, key=lambda t: t["name"].lower()),
         }
 
-        return jsonify({"wlans": result, "filters": BP_FILTERS, "dpc": dpc_info})
+        # 4. Subscriptions / License check + Access Assurance — fetch in parallel
+        WARN_DAYS = 90
+        now = int(time.time())
+        licenses_info = {}
+        aa_info       = {}
+
+        def _fetch_subs():
+            return mist_get(sid, f"/orgs/{org_id}/subscriptions")
+
+        def _fetch_setting():
+            return mist_get(sid, f"/orgs/{org_id}/setting")
+
+        def _fetch_nacrules():
+            return mist_get(sid, f"/orgs/{org_id}/nacrules")
+
+        try:
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                f_subs    = pool.submit(_fetch_subs)
+                f_setting = pool.submit(_fetch_setting)
+                f_nac     = pool.submit(_fetch_nacrules)
+
+            subs_raw = f_subs.result()
+            subs = subs_raw if isinstance(subs_raw, list) else subs_raw.get("results", [])
+
+            processed = []
+            for s in subs:
+                end = s.get("end_time", 0)
+                if not end or end > now + WARN_DAYS * 86400:
+                    st = "active"
+                elif end > now:
+                    st = "expiring"
+                else:
+                    st = "expired"
+                processed.append({
+                    "type":               s.get("type", "Unknown"),
+                    "quantity":           s.get("quantity", 0),
+                    "remaining_quantity": s.get("remaining_quantity"),
+                    "end_time":           end,
+                    "status":             st,
+                })
+            processed.sort(key=lambda s: (s["status"] != "expired", s["status"] != "expiring", s["type"].lower()))
+
+            licenses_info = {
+                "total":    len(processed),
+                "active":   sum(1 for s in processed if s["status"] == "active"),
+                "expiring": sum(1 for s in processed if s["status"] == "expiring"),
+                "expired":  sum(1 for s in processed if s["status"] == "expired"),
+                "subscriptions": processed,
+            }
+
+            # Access Assurance — look for AA subscription type
+            aa_sub = next(
+                (s for s in processed if "ACCESS_ASSURANCE" in s["type"].upper() or s["type"].upper() in ("SUB_AA",)),
+                None
+            )
+            aa_subscribed = aa_sub is not None and aa_sub["status"] != "expired"
+
+            aa_configured = False
+            aa_nac_rules  = 0
+            aa_setting    = {}
+
+            try:
+                setting   = f_setting.result()
+                mist_nac  = setting.get("mist_nac", {})
+                aa_setting = {
+                    "enabled":    bool(mist_nac.get("enabled", False)),
+                    "server_cert_id": mist_nac.get("server_cert_id"),
+                }
+                if mist_nac.get("enabled"):
+                    aa_configured = True
+            except Exception as e:
+                _log.warning("AA setting fetch failed: %s", e)
+
+            try:
+                nac_raw    = f_nac.result()
+                nac_rules  = nac_raw if isinstance(nac_raw, list) else nac_raw.get("results", [])
+                aa_nac_rules = len(nac_rules)
+                if aa_nac_rules > 0:
+                    aa_configured = True
+            except Exception as e:
+                _log.warning("NAC rules fetch failed: %s", e)
+
+            aa_info = {
+                "subscribed":  aa_subscribed,
+                "configured":  aa_configured,
+                "nac_rules":   aa_nac_rules,
+                "nac_enabled": aa_setting.get("enabled", False),
+                "subscription": aa_sub,
+            }
+
+        except Exception as e:
+            _log.warning("License/AA check failed: %s", e)
+            licenses_info = {"error": str(e), "subscriptions": []}
+            aa_info       = {"error": str(e)}
+
+        return jsonify({
+            "wlans":    result,
+            "filters":  BP_FILTERS,
+            "dpc":      dpc_info,
+            "licenses": licenses_info,
+            "aa":       aa_info,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
