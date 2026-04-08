@@ -1323,7 +1323,7 @@ def api_troubleshoot(org_id):
 # ── Best Practices routes ─────────────────────────────────────────────────────
 
 GOLDEN_RF_TEMPLATE = {
-    "name": "Suggested Settings",
+    "name": "Suggested Baseline Settings",
     "country_code": "US",
     # 2.4 GHz — "auto" mode: allow RRM to disable the band if needed
     "band_24": {
@@ -1608,13 +1608,13 @@ def api_bestpractices(org_id):
             licenses_info = {"error": str(e), "subscriptions": []}
             aa_info       = {"error": str(e)}
 
-        # 5. RF template — check for "Suggested Settings"
+        # 5. RF template — check for "Suggested Baseline Settings"
         rf_info = {}
         try:
             rf_raw  = f_rf.result()
             rf_list = rf_raw if isinstance(rf_raw, list) else rf_raw.get("results", [])
             golden  = next((t for t in rf_list
-                            if t.get("name", "").lower() == "suggested settings"), None)
+                            if t.get("name", "").lower() == "suggested baseline settings"), None)
             rf_info = {
                 "exists": golden is not None,
                 "id":     golden.get("id")   if golden else None,
@@ -1693,7 +1693,7 @@ def api_bestpractices_apply(org_id, wlan_id):
 
 @app.route("/api/rftemplate/<org_id>", methods=["POST"])
 def api_create_rf_template(org_id):
-    """Create the Suggested Settings RF template for the org."""
+    """Create the Suggested Baseline Settings RF template for the org."""
     if not valid_uuid(org_id):
         return jsonify({"error": "Invalid org ID"}), 400
     sid = get_authed_sid()
@@ -1707,7 +1707,7 @@ def api_create_rf_template(org_id):
         rf_raw  = mist_get(sid, f"/orgs/{org_id}/rftemplates")
         rf_list = rf_raw if isinstance(rf_raw, list) else rf_raw.get("results", [])
         existing = next((t for t in rf_list
-                         if t.get("name", "").lower() == "suggested settings"), None)
+                         if t.get("name", "").lower() == "suggested baseline settings"), None)
         if existing:
             return jsonify({"status": "already_exists", "id": existing["id"], "name": existing["name"]})
 
