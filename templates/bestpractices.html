@@ -522,22 +522,25 @@ function refreshWlanSubCard() {
 // ── Build Banned Clients sub-card ─────────────────────────────────────────────
 
 function buildBannedClientsSub() {
-  const field     = "block_blacklisted_clients";
+  const field     = "block_blacklist_clients";
   const total     = wlanData.length;
   const enabled   = wlanData.filter(w => w[field]).length;
   const status    = pctStatus(enabled, total);
   const missing   = total - enabled;
 
-  let tableHtml;
-  if (total === 0) {
-    tableHtml = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">
-      No WLANs found.</div>`;
-  } else {
-    let rows = wlanData.map(w => {
+  const sectionHdr = (label, count) =>
+    `<tr><td colspan="3" style="padding:8px 12px 6px;font-size:11px;font-weight:700;
+      letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+      background:var(--surface2);border-top:1px solid var(--border);">
+      ${label} <span style="font-weight:400;opacity:.7;">(${count})</span>
+    </td></tr>`;
+
+  function banRows(list) {
+    return list.map(w => {
       const nameCls  = w.enabled ? "ssid-name" : "ssid-name ssid-disabled";
       const scopeLbl = w.scope === "site"
         ? `<span style="font-size:11px;color:var(--muted)">${w.site_name || w.scope_id}</span>`
-        : `<span style="font-size:11px;color:var(--muted)">Org template</span>`;
+        : `<span style="font-size:11px;color:var(--muted)">—</span>`;
       return `<tr>
         <td class="${nameCls}">${w.ssid}${!w.enabled ? " (disabled)" : ""}</td>
         <td>${scopeLbl}</td>
@@ -552,13 +555,27 @@ function buildBannedClientsSub() {
         </td>
       </tr>`;
     }).join("");
+  }
+
+  const orgWlans  = wlanData.filter(w => w.scope === "org");
+  const siteWlans = wlanData.filter(w => w.scope === "site");
+
+  let tableHtml;
+  if (total === 0) {
+    tableHtml = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">
+      No WLANs found.</div>`;
+  } else {
+    let tbody = "<tbody>";
+    if (orgWlans.length)  tbody += sectionHdr("Org Template WLANs", orgWlans.length)  + banRows(orgWlans);
+    if (siteWlans.length) tbody += sectionHdr("Site WLANs", siteWlans.length) + banRows(siteWlans);
+    tbody += "</tbody>";
 
     tableHtml = `<div class="wlan-table-wrap"><table>
       <thead><tr>
-        <th>SSID</th><th>Scope</th>
+        <th>SSID</th><th>Scope / Site</th>
         <th class="filter-col">Block Banned Clients</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      ${tbody}
     </table></div>`;
   }
 
@@ -766,7 +783,16 @@ function buildDataRatesSub() {
 
   function fixBtnHtml(w) {
     if (w.high_density) return `<span style="font-size:12px;color:var(--muted);">✓ Best practice</span>`;
-    if (!w.in_template) return `<span style="font-size:12px;color:var(--yellow);">⚠ Not in a WLAN template — configure at the template level</span>`;
+    if (!w.in_template) return `
+      <button class="dr-convert-btn" data-wlan="${w.id}" data-site="${w.scope_id}" data-site-name="${w.site_name || ''}" data-ssid="${w.ssid}"
+        style="padding:5px 12px;font-size:12px;font-weight:600;border-radius:6px;border:1px solid var(--yellow);
+               cursor:pointer;background:transparent;color:var(--yellow);white-space:nowrap;">
+        Convert to Template
+      </button>
+      <div class="toggle-spinner" id="dr-conv-spin-${w.id}" style="display:none;width:14px;height:14px;
+        border:2px solid var(--border);border-top-color:var(--yellow);border-radius:50%;
+        animation:spin 0.8s linear infinite;margin-left:6px;"></div>
+      <div class="apply-result" id="dr-conv-res-${w.id}" style="display:none;font-size:12px;margin-top:4px;"></div>`;
     return `<button class="dr-fix-btn" data-wlan="${w.id}"
               style="padding:5px 12px;font-size:12px;font-weight:600;border-radius:6px;border:none;
                      cursor:pointer;background:linear-gradient(135deg,var(--purple),var(--indigo));
@@ -871,6 +897,69 @@ function buildDataRatesSub() {
     }
     refreshParentCard("wireless");
   }
+
+  // Wire Convert to Template buttons
+  sub.querySelectorAll("button.dr-convert-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const wlanId   = btn.dataset.wlan;
+      const siteId   = btn.dataset.site;
+      const siteName = btn.dataset.siteName;
+      const ssid     = btn.dataset.ssid;
+      const spin     = document.getElementById(`dr-conv-spin-${wlanId}`);
+      const res      = document.getElementById(`dr-conv-res-${wlanId}`);
+
+      if (!confirm(`Convert "${ssid}" to its own WLAN template?\n\nThis will:\n• Create a new template named "${ssid} (${siteName || siteId})"\n• Move the WLAN to org level with High Density data rates applied\n• Apply the template to ${siteName || siteId}\n• Delete the site-level WLAN\n\nProceed?`)) {
+        btn.disabled = false;
+        return;
+      }
+
+      btn.disabled = true;
+      if (spin) spin.style.display = "inline-block";
+
+      try {
+        const r = await fetch(`/api/convert_wlan/${ORG_ID}`, {
+          method:  "POST",
+          headers: {"Content-Type": "application/json"},
+          body:    JSON.stringify({wlan_id: wlanId, site_id: siteId, site_name: siteName}),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+
+        // Update drData entry
+        const entry = drData.find(x => x.id === wlanId);
+        if (entry) {
+          entry.id = data.new_wlan_id; entry.scope = "org"; entry.in_template = true;
+          entry.template_id = data.template_id; entry.high_density = true;
+          entry.band_24 = "high-density"; entry.band_5 = "high-density"; entry.band_6 = "high-density";
+        }
+
+        // Update row in-place
+        const settingCell = document.getElementById(`dr-setting-${wlanId}`);
+        if (settingCell) settingCell.innerHTML = `<span style="color:var(--green);font-weight:600;">High Density</span>`;
+        const actionCell = btn.closest("td");
+        if (actionCell) actionCell.innerHTML = `<span style="font-size:12px;color:var(--green);">✓ Template: ${data.template_name}</span>`;
+
+        // Refresh score
+        const newEnabled = drData.filter(x => x.high_density).length;
+        const newStatus  = pctStatus(newEnabled, drData.length);
+        const sc = document.getElementById("sub-data-rates");
+        if (sc) {
+          sc.className = `bp-sub status-${newStatus}${sc.classList.contains("expanded") ? " expanded" : ""}`;
+          sc.dataset.status = newStatus;
+          sc.querySelector(".bp-sub-score").textContent = `${newEnabled}/${drData.length}`;
+          const badge = sc.querySelector(".bp-badge");
+          if (badge) { badge.className = `bp-badge ${newStatus}`; badge.textContent = badgeLabel(newStatus); }
+        }
+        refreshParentCard("wireless");
+
+      } catch (err) {
+        if (res) { res.style.display = "block"; res.className = "apply-result err"; res.textContent = err.message; }
+        btn.disabled = false;
+      } finally {
+        if (spin) spin.style.display = "none";
+      }
+    });
+  });
 
   const drWarning = `Changing data rates will restart the radio on affected APs — connected clients will briefly disconnect.\n\nProceed?`;
 

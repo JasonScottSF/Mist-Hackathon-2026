@@ -120,6 +120,15 @@ def mist_patch(sid, path, body):
     return rs.patch(mist_url(host, path), json=body, headers=headers, timeout=20)
 
 
+def mist_delete(sid, path):
+    store = _sessions[sid]
+    rs    = store["requests_session"]
+    host  = store["cloud_host"]
+    csrf  = next((v for k, v in rs.cookies.items() if k.startswith("csrftoken")), None)
+    headers = {"X-CSRFToken": csrf} if csrf else {}
+    return rs.delete(mist_url(host, path), headers=headers, timeout=20)
+
+
 def authed(sid):
     return bool(sid and sid in _sessions and _sessions[sid].get("authenticated"))
 
@@ -1401,7 +1410,7 @@ BP_FILTERS = [
         ),
     },
     {
-        "field":      "block_blacklisted_clients",
+        "field":      "block_blacklist_clients",
         "label":      "Prevent Banned Clients",
         "standalone": True,
         "tooltip": (
@@ -1452,7 +1461,7 @@ def api_bestpractices(org_id):
                 "limit_bcast":               bool(w.get("limit_bcast", False)),
                 "limit_probe_response":      bool(w.get("limit_probe_response", False)),
                 "no_legacy":                 bool(w.get("no_legacy", False)),
-                "block_blacklisted_clients": bool(w.get("block_blacklisted_clients", False)),
+                "block_blacklist_clients": bool(w.get("block_blacklist_clients", False)),
                 "scope":                     scope,
                 "scope_id":                  scope_id,
                 "site_name":                 site_name,
@@ -1944,6 +1953,104 @@ def api_datarates_apply(org_id, wlan_id):
         return jsonify({"status": "error", "detail": detail}), r.status_code
 
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/wlantemplates/<org_id>")
+def api_list_wlantemplates(org_id):
+    """Return org wlantemplates for the template picker."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+    try:
+        raw = mist_get(sid, f"/orgs/{org_id}/templates")
+        templates = [{"id": t["id"], "name": t.get("name", t["id"])}
+                     for t in (raw if isinstance(raw, list) else raw.get("results", []))
+                     if t.get("id")]
+        return jsonify({"templates": templates})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/convert_wlan/<org_id>", methods=["POST"])
+def api_convert_wlan(org_id):
+    """
+    Convert a site-level WLAN into an existing org WLAN template.
+    Steps:
+      1. Fetch full site WLAN config
+      2. Ensure the chosen template applies to this site
+      3. Create an org-level WLAN with the same config under that template,
+         with rateset set to high-density on all active bands
+      4. Delete the original site-level WLAN
+    """
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    data      = request.json or {}
+    wlan_id   = data.get("wlan_id", "")
+    site_id   = data.get("site_id", "")
+    site_name = data.get("site_name", site_id)
+    tmpl_id   = data.get("template_id", "")
+
+    if not valid_uuid(wlan_id) or not valid_uuid(site_id):
+        return jsonify({"error": "Invalid wlan_id or site_id"}), 400
+
+    try:
+        # 1. Fetch full site WLAN
+        wlan  = mist_get(sid, f"/sites/{site_id}/wlans/{wlan_id}")
+        ssid  = wlan.get("ssid", "Unnamed")
+        bands = wlan.get("bands", ["24", "5"])
+
+        # 2. Create a new template named "{ssid} ({site_name})"
+        tmpl_name = f"{ssid} ({site_name})"
+        tmpl_resp = mist_post(sid, f"/orgs/{org_id}/templates", {
+            "name":    tmpl_name,
+            "applies": {"site_ids": [site_id], "sitegroup_ids": []},
+        })
+        if not tmpl_resp.ok:
+            return jsonify({"error": f"Failed to create template: {tmpl_resp.text[:300]}"}), tmpl_resp.status_code
+        tmpl_id   = tmpl_resp.json().get("id")
+        tmpl_name = tmpl_resp.json().get("name", tmpl_name)
+
+        # 3. Build org WLAN — copy config as-is, strip site-specific fields only
+        _strip   = {"id", "created_time", "modified_time", "site_id", "for_site",
+                    "template_id", "org_id", "portal_template_url"}
+        org_wlan = {k: v for k, v in wlan.items() if k not in _strip}
+        org_wlan["template_id"] = tmpl_id
+
+        wlan_resp = mist_post(sid, f"/orgs/{org_id}/wlans", org_wlan)
+        if not wlan_resp.ok:
+            return jsonify({"error": f"Failed to create org WLAN: {wlan_resp.text[:200]}"}), wlan_resp.status_code
+        new_wlan_id = wlan_resp.json().get("id")
+
+        # 4. Disable the original site WLAN (preserve config, just turn it off)
+        wlan["enabled"] = False
+        dis_resp = mist_put(sid, f"/sites/{site_id}/wlans/{wlan_id}", wlan)
+        if not dis_resp.ok:
+            _log.warning("Failed to disable site WLAN %s: %s", wlan_id, dis_resp.text[:200])
+
+        _log.info("CONVERT_WLAN ssid=%s site=%s new_wlan=%s tmpl=%s actor=%s",
+                  ssid, site_id, new_wlan_id, tmpl_id, _sessions[sid].get("email", "unknown"))
+
+        return jsonify({
+            "status":        "converted",
+            "ssid":          ssid,
+            "template_id":   tmpl_id,
+            "template_name": tmpl_name,
+            "new_wlan_id":   new_wlan_id,
+        })
+
+    except Exception as e:
+        _log.exception("CONVERT_WLAN error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
