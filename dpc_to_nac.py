@@ -43,7 +43,7 @@ _limiter = Limiter(
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _log = logging.getLogger("dpc_nac")
 
-_SESSION_TTL = 8 * 3600  # seconds; sessions pruned lazily on each request
+_SESSION_TTL = 4 * 3600  # seconds; sessions pruned lazily on each request
 _UUID_RE = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE
 )
@@ -141,6 +141,11 @@ def recover_session():
     """
     auth_info = session.get("auth_info", {})
     if not auth_info:
+        return None
+    # Enforce hard 4-hour wall-clock expiry from original login time
+    login_time = auth_info.get("login_time", 0)
+    if time.time() - login_time > _SESSION_TTL:
+        session.clear()
         return None
     cloud_host = auth_info.get("cloud_host", "api.mist.com")
     try:
@@ -551,6 +556,7 @@ def login():
                         "cloud_host":  host,
                         "email":       store["email"],
                         "password":    store.pop("password", ""),
+                        "login_time":  time.time(),
                     }
                     return redirect(url_for("orgs"))
                 elif r.status_code == 401:
@@ -599,6 +605,7 @@ def login():
                             "auth_method": "apikey",
                             "cloud_host":  cloud_host,
                             "api_key":     api_key,
+                            "login_time":  time.time(),
                         }
                         return redirect(url_for("orgs"))
                     else:
@@ -637,6 +644,7 @@ def login():
                             "cloud_host":  cloud_host,
                             "email":       email,
                             "password":    _sessions[sid].pop("password", password),
+                            "login_time":  time.time(),
                         }
                         return redirect(url_for("orgs"))
                     elif r.status_code == 401:
