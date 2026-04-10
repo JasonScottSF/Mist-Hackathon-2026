@@ -1063,7 +1063,7 @@ function openDrawer(id) {
 
     const tmplRows  = tmplWlans.map(w => wlanRow(w, "tmpl")).join("");
     const siteRows2 = siteWlans.map(w => wlanRow(w, "site")).join("");
-    const needsFix  = drWlans.some(w => w.enabled !== false && rateStatus(w) !== "high-density");
+    const needsFix  = drWlans.some(w => w.enabled !== false && worstRate(w) !== "high-density");
 
     openDrawerContent("Data Rates", "high-density disables legacy 802.11b/g rates, improving airtime efficiency",
       `${tmplRows   ? `<div class="receipt-section">Template WLANs</div>${tmplRows}` : ""}
