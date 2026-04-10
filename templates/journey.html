@@ -84,11 +84,13 @@
     .check-row.yellow { border-left-color: var(--yellow); }
     .check-row.red    { border-left-color: var(--red); }
     .check-row.muted  { border-left-color: var(--border); cursor: default; }
+    .check-row.info   { border-left-color: #60a5fa; }
     .status-dot       { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .status-dot.green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
     .status-dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
     .status-dot.red    { background: var(--red);    box-shadow: 0 0 6px var(--red); }
     .status-dot.muted  { background: var(--border); }
+    .status-dot.info   { background: #60a5fa; box-shadow: 0 0 6px rgba(96,165,250,0.5); }
     .check-info        { flex: 1; min-width: 0; }
     .check-name        { font-size: 13px; font-weight: 500; }
     .check-detail      { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -98,34 +100,61 @@
     .badge-yellow { background: rgba(234,179,8,0.12);  color: var(--yellow); }
     .badge-red    { background: rgba(239,68,68,0.12);  color: var(--red); }
     .badge-muted  { background: var(--surface2); color: var(--muted); }
+    .badge-info   { background: rgba(96,165,250,0.12); color: #60a5fa; }
 
-    /* ── Deploy cards ── */
-    .deploy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
-    @media (max-width: 600px) { .deploy-grid { grid-template-columns: 1fr; } }
-    .deploy-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px; cursor: pointer; transition: border-color 0.15s; }
-    .deploy-card:hover { border-color: var(--purple-lt); }
-    .deploy-card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 12px; }
-    .deploy-stat     { font-size: 32px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
-    .deploy-stat.green  { color: var(--green); }
-    .deploy-stat.yellow { color: var(--yellow); }
-    .deploy-stat.red    { color: var(--red); }
-    .deploy-stat-sub { font-size: 12px; color: var(--muted); }
+    /* ── Deploy summary bar ── */
+    .deploy-summary { display: flex; align-items: center; gap: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 22px; margin-bottom: 28px; flex-wrap: wrap; }
+    .deploy-summary-stat { display: flex; flex-direction: column; gap: 2px; }
+    .deploy-summary-val  { font-size: 28px; font-weight: 800; line-height: 1; }
+    .deploy-summary-val.green  { color: var(--green); }
+    .deploy-summary-val.yellow { color: var(--yellow); }
+    .deploy-summary-val.red    { color: var(--red); }
+    .deploy-summary-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .deploy-summary-divider { width: 1px; height: 36px; background: var(--border); flex-shrink: 0; }
 
-    .dpc-banner { background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(124,58,237,0.05)); border: 1px solid rgba(124,58,237,0.3); border-radius: 10px; padding: 20px 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
-    .dpc-banner-left { display: flex; align-items: center; gap: 14px; }
-    .dpc-icon { width: 42px; height: 42px; background: rgba(124,58,237,0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
-    .dpc-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-    .dpc-sub   { font-size: 12px; color: var(--muted); }
+    /* ── Site checklist cards ── */
+    .site-checklist { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+    .site-checklist-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: background 0.1s;
+    }
+    .site-checklist-header:hover { background: var(--surface2); }
+    .site-go-badge {
+      font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 99px;
+      letter-spacing: 0.05em; flex-shrink: 0;
+    }
+    .site-go-badge.go  { background: rgba(34,197,94,0.12);  color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+    .site-go-badge.nogo { background: rgba(239,68,68,0.12); color: var(--red);   border: 1px solid rgba(239,68,68,0.25); }
+    .site-checklist-name { flex: 1; font-size: 14px; font-weight: 600; }
+    .site-chevron { color: var(--muted); font-size: 12px; transition: transform 0.2s; }
+    .site-checklist.expanded .site-chevron { transform: rotate(90deg); }
+    .site-checklist-body { display: none; }
+    .site-checklist.expanded .site-checklist-body { display: block; }
 
-    .site-deploy-row { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; transition: background 0.1s; }
-    .site-deploy-row:last-child { border-bottom: none; }
-    .site-deploy-row:hover { background: var(--surface2); }
-    .site-deploy-row.no-click { cursor: default; }
-    .site-deploy-row.no-click:hover { background: none; }
-    .site-deploy-name { flex: 1; font-weight: 500; }
-    .site-deploy-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
-    .progress-pill { height: 6px; border-radius: 99px; background: var(--border); width: 80px; overflow: hidden; flex-shrink: 0; }
-    .progress-fill { height: 100%; border-radius: 99px; }
+    /* ── Go/no-go check rows ── */
+    .gonogo-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 18px; border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .gonogo-row:last-child { border-bottom: none; }
+    .gonogo-checkbox {
+      width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+    }
+    .gonogo-checkbox.go   { background: rgba(34,197,94,0.15);  color: var(--green); border: 1.5px solid rgba(34,197,94,0.4); }
+    .gonogo-checkbox.nogo { background: rgba(239,68,68,0.12);  color: var(--red);   border: 1.5px solid rgba(239,68,68,0.35); }
+    .gonogo-checkbox.na   { background: var(--surface2); color: var(--muted); border: 1.5px solid var(--border); }
+    .gonogo-info   { flex: 1; min-width: 0; }
+    .gonogo-label  { font-weight: 500; }
+    .gonogo-label.na { color: var(--muted); }
+    .gonogo-detail { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .gonogo-fix {
+      font-size: 12px; font-weight: 600; color: var(--purple-lt);
+      text-decoration: none; white-space: nowrap; flex-shrink: 0; padding: 3px 8px;
+      border: 1px solid rgba(167,139,250,0.3); border-radius: 5px; transition: all 0.15s;
+    }
+    .gonogo-fix:hover { background: rgba(124,58,237,0.15); color: #c4b5fd; }
 
     /* ── Operate ── */
     .sle-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
@@ -178,6 +207,38 @@
     /* ── Section header ── */
     .section-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
     .section-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+    /* ── Golden Config Templates ── */
+    .golden-section { margin-bottom: 32px; }
+    .golden-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .golden-section-left { display: flex; align-items: center; gap: 10px; }
+    .golden-section-title { font-size: 13px; font-weight: 700; color: var(--text); }
+    .golden-section-sub { font-size: 12px; color: var(--muted); }
+    .golden-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(167,139,250,0.12); color: var(--purple-lt); border: 1px solid rgba(167,139,250,0.25); letter-spacing: 0.05em; }
+    .golden-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    @media (max-width: 680px) { .golden-grid { grid-template-columns: 1fr; } }
+    .golden-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0; display: flex; flex-direction: column; overflow: hidden; transition: border-color 0.15s; }
+    .golden-card:hover { border-color: rgba(167,139,250,0.4); }
+    .golden-card-top { padding: 16px 16px 12px; flex: 1; }
+    .golden-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .golden-card-icon { width: 32px; height: 32px; background: rgba(124,58,237,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+    .golden-card-title { font-size: 13px; font-weight: 600; line-height: 1.2; }
+    .golden-card-type { font-size: 11px; color: var(--muted); }
+    .golden-settings { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+    .golden-settings li { font-size: 12px; color: var(--muted); display: flex; align-items: flex-start; gap: 6px; line-height: 1.4; }
+    .golden-settings li::before { content: "✓"; color: var(--purple-lt); font-size: 10px; font-weight: 700; margin-top: 2px; flex-shrink: 0; }
+    .golden-card-footer { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(0,0,0,0.1); }
+    .golden-card-footer > :first-child { display: flex; align-items: center; gap: 7px; }
+    .golden-status-box { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+    .golden-status-box.found   { background: rgba(34,197,94,0.15);  color: var(--green); border: 1.5px solid rgba(34,197,94,0.4); }
+    .golden-status-box.missing { background: rgba(239,68,68,0.12);  color: var(--red);   border: 1.5px solid rgba(239,68,68,0.35); }
+    .golden-status-box.loading { background: var(--surface2); color: var(--muted); border: 1.5px solid var(--border); }
+    .golden-status-label { font-size: 11px; color: var(--muted); }
+    .btn-clone { font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 6px; background: var(--purple); color: #fff; border: none; cursor: pointer; transition: all 0.15s; white-space: nowrap; flex-shrink: 0; }
+    .btn-clone:hover { background: #6d28d9; }
+    .btn-clone:disabled { background: var(--surface2); color: var(--muted); cursor: default; border: 1px solid var(--border); }
+    .btn-clone.exists { background: none; color: var(--green); border: 1px solid rgba(34,197,94,0.3); padding: 4px 10px; }
+    .btn-clone.exists:hover { background: rgba(34,197,94,0.08); }
 
     /* ── Drawer ── */
     .drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
@@ -234,7 +295,7 @@
 </header>
 
 <nav class="journey-bar">
-  <div class="journey-phase" id="phase-btn-plan" onclick="setPhase('plan')">
+  <div class="journey-phase active" id="phase-btn-plan" onclick="setPhase('plan')">
     <div class="phase-badge" id="phase-badge-plan">1</div>
     <div class="phase-label">
       <div class="phase-name">Plan</div>
@@ -242,7 +303,7 @@
     </div>
   </div>
   <div class="phase-arrow">›</div>
-  <div class="journey-phase active" id="phase-btn-deploy" onclick="setPhase('deploy')">
+  <div class="journey-phase" id="phase-btn-deploy" onclick="setPhase('deploy')">
     <div class="phase-badge" id="phase-badge-deploy">2</div>
     <div class="phase-label">
       <div class="phase-name">Deploy</div>
@@ -261,14 +322,14 @@
 
 <main>
   <!-- ═══ PLAN ═══ -->
-  <div class="page" id="page-plan">
+  <div class="page active" id="page-plan">
     <div class="page-title">Is your org ready to deploy?</div>
     <div class="page-subtitle">Check these items before hardware arrives. Fixing them now is much easier than after devices are online.</div>
     <div id="plan-content"><div class="phase-loading"><div class="spinner"></div>Checking configuration…</div></div>
   </div>
 
   <!-- ═══ DEPLOY ═══ -->
-  <div class="page active" id="page-deploy">
+  <div class="page" id="page-deploy">
     <div class="page-title">Devices are coming online</div>
     <div class="page-subtitle">Track your rollout as sites go live. Convert DPC rules to NAC while the configuration is fresh.</div>
     <div id="deploy-content"><div class="phase-loading"><div class="spinner"></div>Fetching device status…</div></div>
@@ -377,6 +438,155 @@ async function loadAll() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// GOLDEN CONFIG TEMPLATES
+// ══════════════════════════════════════════════════════════════════════════════
+
+const GOLDEN_DEFS = [
+  {
+    key: "wlan",
+    icon: "📡",
+    title: "WLAN Template",
+    apiType: "wlantemplates",
+    settings: [
+      "High-density data rates (disable legacy 802.11b/g)",
+      "Banned client protection enabled",
+      "Band steering — push 5 GHz capable clients",
+      "PMF (Protected Management Frames) required",
+    ],
+  },
+  {
+    key: "network",
+    icon: "🔌",
+    title: "Network Template",
+    apiType: "networktemplates",
+    settings: [
+      "NTP servers pre-configured (pool.ntp.org)",
+      "LLDP enabled on all ports",
+      "Voice / data port profiles",
+      "DNS placeholder — fill in your servers",
+    ],
+  },
+  {
+    key: "rf",
+    icon: "📶",
+    title: "RF Template",
+    apiType: "rftemplates",
+    settings: [
+      "RRM (Radio Resource Management) enabled",
+      "Scanning enabled (Mist AI telemetry)",
+      "Tx power min/max tuned for density",
+      "Short preamble on 2.4 GHz",
+    ],
+  },
+];
+
+// golden_status: { wlan: {exists, id, name}, network: {...}, rf: {...} }
+let golden_status = null;
+
+function goldenSectionHtml() {
+  const cards = GOLDEN_DEFS.map(d => {
+    const gs = golden_status ? golden_status[d.key] : null;
+    const loading = golden_status === null;
+    let footerBtn, statusText;
+    if (loading) {
+      statusText = `<div class="golden-status-box loading">—</div><span class="golden-status-label">Checking…</span>`;
+      footerBtn  = `<button class="btn-clone" disabled>Checking…</button>`;
+    } else if (gs && gs.exists) {
+      statusText = `<div class="golden-status-box found">✓</div><span class="golden-status-label">Created</span>`;
+      footerBtn  = `<button class="btn-clone exists" onclick="openGoldenDrawer('${d.key}')">View →</button>`;
+    } else {
+      statusText = `<div class="golden-status-box missing">✕</div><span class="golden-status-label">Not created</span>`;
+      footerBtn  = `<button class="btn-clone" id="btn-golden-${d.key}" onclick="createGoldenTemplate('${d.key}')">Create Best Practice Template</button>`;
+    }
+    const settingItems = d.settings.map(s => `<li>${s}</li>`).join("");
+    return `
+      <div class="golden-card" id="golden-card-${d.key}">
+        <div class="golden-card-top">
+          <div class="golden-card-head">
+            <div class="golden-card-icon">${d.icon}</div>
+            <div>
+              <div class="golden-card-title">${d.title}</div>
+              <div class="golden-card-type">Best practice template</div>
+            </div>
+          </div>
+          <ul class="golden-settings">${settingItems}</ul>
+        </div>
+        <div class="golden-card-footer">
+          <div>${statusText}</div>
+          ${footerBtn}
+        </div>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="golden-section">
+      <div class="golden-section-header">
+        <div class="golden-section-left">
+          <div class="golden-section-title">Best Practice Templates</div>
+          <span class="golden-badge">HPE Recommended</span>
+        </div>
+        <div class="golden-section-sub">HPE recommended defaults — assign to sites and customize from there</div>
+      </div>
+      <div class="golden-grid">${cards}</div>
+    </div>`;
+}
+
+async function loadGoldenStatus() {
+  try {
+    const res = await fetch(`/api/golden_status/${ORG_ID}`);
+    if (!res.ok) throw new Error(res.statusText);
+    golden_status = await res.json();
+  } catch(e) {
+    golden_status = { wlan: {exists:false}, network: {exists:false}, rf: {exists:false} };
+  }
+  // Re-render just the golden section (don't rebuild all of plan)
+  const sec = document.getElementById("golden-section");
+  if (sec) sec.innerHTML = goldenSectionHtml();
+}
+
+async function createGoldenTemplate(key) {
+  const btn = document.getElementById(`btn-golden-${key}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
+  try {
+    const res = await fetch(`/api/create_golden/${ORG_ID}/${key}`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    // Update status and re-render section
+    if (!golden_status) golden_status = {};
+    golden_status[key] = { exists: true, id: data.id, name: data.name };
+    const sec = document.getElementById("golden-section");
+    if (sec) sec.innerHTML = goldenSectionHtml();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
+    console.error("createGoldenTemplate:", e);
+    alert(`Failed to create template: ${e.message}`);
+  }
+}
+
+function openGoldenDrawer(key) {
+  const def = GOLDEN_DEFS.find(d => d.key === key);
+  const gs  = golden_status?.[key] || {};
+  const settingRows = def.settings.map(s =>
+    `<div class="receipt-row"><div class="receipt-row-name">${s}</div><div class="receipt-row-val green">Applied</div></div>`
+  ).join("");
+  const apiEndpoint = key === "wlan" ? "wlantemplates"
+                    : key === "network" ? "networktemplates"
+                    : "rftemplates";
+  openDrawerContent(
+    `${def.title} — Working Clone`,
+    `HPE Networking recommended settings · ${gs.name || ""}`,
+    `<div class="receipt-score">
+      <div class="receipt-big green">✓</div>
+      <div class="receipt-label"><strong>Template exists</strong>Assign this template to your sites to apply HPE best practice settings.</div>
+    </div>
+    <div class="receipt-section">Recommended settings included</div>
+    ${settingRows}
+    <div class="source-line">&#128203; Template ID: <code>${gs.id || "—"}</code>&nbsp;·&nbsp;<code>GET /orgs/{id}/${apiEndpoint}/${gs.id || "{id}"}</code></div>`,
+    `<a class="drawer-btn-primary" href="https://${state.health?.manage_host||'manage.mist.com'}" target="_blank">Open in Mist ↗</a>`
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // PLAN
 // ══════════════════════════════════════════════════════════════════════════════
 function calcPlanChecks() {
@@ -457,11 +667,11 @@ function calcPlanChecks() {
   checks.push({
     id: "licenses",
     name: "Subscriptions",
-    status: expired > 0 ? "red" : expiring > 0 ? "yellow" : total > 0 ? "green" : "muted",
+    status: expired > 0 ? "red" : expiring > 0 ? "yellow" : total > 0 ? "green" : "info",
     detail: expired  > 0 ? `${expired} expired subscription${expired!==1?"s":""}`
           : expiring > 0 ? `${expiring} expiring within 90 days`
           : total    > 0 ? "All licenses active"
-          : "No subscription data",
+          : "No active subscriptions — API token access is not subscription-dependent",
     actionLabel: null,
   });
 
@@ -505,10 +715,12 @@ function renderPlan() {
       ? `<span class="check-action">${c.actionLabel}</span>`
       : c.status === "green"
         ? `<span class="check-badge badge-green">✓ Good</span>`
-        : c.optional
-          ? `<span class="check-badge badge-muted">Optional</span>`
-          : `<span class="check-badge badge-${c.status}">${c.status === "red" ? "✕ Issue" : "⚠ Warning"}</span>`;
-    const clickable = c.status !== "muted" || c.optional;
+        : c.status === "info"
+          ? `<span class="check-badge badge-info">ℹ Info</span>`
+          : c.optional
+            ? `<span class="check-badge badge-muted">Optional</span>`
+            : `<span class="check-badge badge-${c.status}">${c.status === "red" ? "✕ Issue" : "⚠ Warning"}</span>`;
+    const clickable = !["muted"].includes(c.status) || c.optional;
     return `<div class="check-row ${c.status}" onclick="${clickable ? `openDrawer('${c.id}')` : ''}">
       <div class="status-dot ${c.status}"></div>
       <div class="check-info">
@@ -534,6 +746,7 @@ function renderPlan() {
       </div>
       ${!allGood ? `<a class="btn-primary" href="/bestpractices/${ORG_ID}">Fix in Best Practices →</a>` : ""}
     </div>
+    <div id="golden-section">${goldenSectionHtml()}</div>
     ${groupHtml("Wireless", "var(--blue)", wireless)}
     ${groupHtml("Wired", "#10b981", wired)}
     ${groupHtml("Organization", "var(--purple-lt)", org)}`;
@@ -543,97 +756,101 @@ function renderPlan() {
     document.getElementById("phase-btn-plan").classList.add("done");
     document.getElementById("phase-badge-plan").textContent = "✓";
   }
+
+  // Load golden template status async (doesn't block readiness checks)
+  loadGoldenStatus();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // DEPLOY
 // ══════════════════════════════════════════════════════════════════════════════
+function toggleSiteCard(siteId) {
+  const card = document.getElementById(`site-card-${siteId}`);
+  if (card) card.classList.toggle("expanded");
+}
+
 function renderDeploy() {
   const el = document.getElementById("deploy-content");
   if (!state.deploy) {
     el.innerHTML = `<div class="phase-error">Failed to load device status.</div>`;
     return;
   }
-  const d     = state.deploy;
-  const bp    = state.bp || {};
-  const dpc   = bp.dpc  || {};
+  const d    = state.deploy;
   const sites = d.sites || [];
   const tot   = d.totals || {};
 
-  const onlineClr = d.sites_online === d.sites_total ? "green"
-                  : d.sites_online > 0               ? "yellow" : "red";
+  const sitesGo   = d.sites_go   || 0;
+  const sitesTotal= d.sites_total || 0;
+  const allGo     = sitesGo === sitesTotal && sitesTotal > 0;
+  const goClr     = allGo ? "green" : sitesGo > 0 ? "yellow" : "red";
+  const devClr    = tot.devices_online === tot.devices && tot.devices > 0 ? "green"
+                  : tot.devices_online > 0 ? "yellow" : "red";
 
-  const siteRows = sites.map(s => {
-    const pct = s.total > 0 ? Math.round((s.online / s.total) * 100) : 0;
-    const clr = s.status === "online" ? "var(--green)" : s.status === "partial" ? "var(--yellow)" : "var(--border)";
-    const meta = s.status === "pending" ? "Not yet started"
-               : s.offline > 0         ? `${s.total} devices · ${s.offline} disconnected`
-               :                          `${s.total} devices · all up`;
-    const clickable = s.status !== "pending";
-    return `<div class="site-deploy-row${clickable?"":" no-click"}" ${clickable ? `onclick="openDeployDrawer('site','${s.id}')"` : ""}>
-      <div class="status-dot ${s.status === 'online' ? 'green' : s.status === 'partial' ? 'yellow' : 'muted'}"></div>
-      <div class="site-deploy-name">${s.name}</div>
-      <div class="site-deploy-meta">${meta}</div>
-      <div class="progress-pill"><div class="progress-fill" style="width:${pct}%;background:${clr}"></div></div>
+  // Summary bar
+  const summary = `
+    <div class="deploy-summary">
+      <div class="deploy-summary-stat">
+        <div class="deploy-summary-val ${goClr}">${sitesGo} / ${sitesTotal}</div>
+        <div class="deploy-summary-label">Sites GO</div>
+      </div>
+      <div class="deploy-summary-divider"></div>
+      <div class="deploy-summary-stat">
+        <div class="deploy-summary-val ${devClr}">${tot.devices_online || 0} / ${tot.devices || 0}</div>
+        <div class="deploy-summary-label">Devices online</div>
+      </div>
+      <div class="deploy-summary-divider"></div>
+      <div class="deploy-summary-stat">
+        <div class="deploy-summary-val">${tot.by_type?.ap || 0}</div>
+        <div class="deploy-summary-label">APs</div>
+      </div>
+      <div class="deploy-summary-stat">
+        <div class="deploy-summary-val">${tot.by_type?.switch || 0}</div>
+        <div class="deploy-summary-label">Switches</div>
+      </div>
+      <div class="deploy-summary-stat">
+        <div class="deploy-summary-val">${tot.by_type?.gateway || 0}</div>
+        <div class="deploy-summary-label">Gateways</div>
+      </div>
     </div>`;
+
+  // Per-site checklist cards
+  const siteCards = sites.map(s => {
+    const isGo    = s.go;
+    const checks  = s.checks || [];
+    const issueCount = checks.filter(c => !c.go && !c.na).length;
+
+    const checkRows = checks.map(c => {
+      const boxCls  = c.na ? "na" : c.go ? "go" : "nogo";
+      const boxIcon = c.na ? "—"  : c.go ? "✓"  : "✕";
+      const fixLink = (!c.go && !c.na && c.fix_url)
+        ? `<a class="gonogo-fix" href="${c.fix_url}">${c.fix_label || "Fix →"}</a>` : "";
+      return `<div class="gonogo-row">
+        <div class="gonogo-checkbox ${boxCls}">${boxIcon}</div>
+        <div class="gonogo-info">
+          <div class="gonogo-label${c.na ? " na" : ""}">${c.label}</div>
+          <div class="gonogo-detail">${c.detail}</div>
+        </div>
+        ${fixLink}
+      </div>`;
+    }).join("");
+
+    const headerSub = isGo
+      ? `<span style="font-size:12px;color:var(--muted)">${s.total} device${s.total!==1?"s":""} · all checks passed</span>`
+      : `<span style="font-size:12px;color:var(--red)">${issueCount} issue${issueCount!==1?"s":""} need attention</span>`;
+
+    return `
+      <div class="site-checklist${isGo ? "" : " expanded"}" id="site-card-${s.id}">
+        <div class="site-checklist-header" onclick="toggleSiteCard('${s.id}')">
+          <span class="site-go-badge ${isGo ? "go" : "nogo"}">${isGo ? "GO" : "NO GO"}</span>
+          <div class="site-checklist-name">${s.name}</div>
+          ${headerSub}
+          <span class="site-chevron">›</span>
+        </div>
+        <div class="site-checklist-body">${checkRows}</div>
+      </div>`;
   }).join("");
 
-  const dpcBanner = dpc.has_rules ? `
-    <div class="dpc-banner">
-      <div class="dpc-banner-left">
-        <div class="dpc-icon">&#8644;</div>
-        <div>
-          <div class="dpc-title">${dpc.rule_count} DPC rule${dpc.rule_count!==1?"s":""} ready to convert</div>
-          <div class="dpc-sub">Migrate to proper NAC policies while your deployment is fresh.</div>
-        </div>
-      </div>
-      <a class="btn-primary" href="/scan/${ORG_ID}">Open DPC → NAC ›</a>
-    </div>` : "";
-
-  el.innerHTML = `
-    <div class="deploy-grid">
-      <div class="deploy-card" onclick="openDrawer('sites-online')">
-        <div class="deploy-card-title">Sites online</div>
-        <div class="deploy-stat ${onlineClr}">${d.sites_online} / ${d.sites_total}</div>
-        <div class="deploy-stat-sub">${d.sites_total - d.sites_online} site${d.sites_total-d.sites_online!==1?"s":""} not yet active</div>
-      </div>
-      <div class="deploy-card" onclick="openDrawer('devices-connected')">
-        <div class="deploy-card-title">Devices connected</div>
-        <div class="deploy-stat">${tot.devices_online || 0}</div>
-        <div class="deploy-stat-sub">of ${tot.devices||0} · APs · switches · gateways</div>
-      </div>
-    </div>
-    ${dpcBanner}
-    <div class="section-title"><div class="section-dot" style="background:var(--purple-lt)"></div>Site rollout</div>
-    <div class="check-card">${siteRows || '<div style="padding:20px;color:var(--muted);font-size:13px;text-align:center">No sites found.</div>'}</div>`;
-}
-
-function openDeployDrawer(type, id) {
-  if (type === "site") {
-    const site = (state.deploy?.sites || []).find(s => s.id === id);
-    if (!site) return;
-    const clr = site.status === "online" ? "green" : site.status === "partial" ? "yellow" : "muted";
-    const rows = [
-      { label: "APs",        val: site.by_type?.ap       || 0 },
-      { label: "Switches",   val: site.by_type?.switch    || 0 },
-      { label: "Gateways",   val: site.by_type?.gateway   || 0 },
-    ].map(r => `<div class="receipt-row">
-      <div class="receipt-row-name">${r.label}</div>
-      <div class="receipt-row-val">${r.val}</div>
-    </div>`).join("");
-    openDrawerContent(
-      site.name,
-      `${site.online} of ${site.total} devices online`,
-      `<div class="receipt-score">
-        <div class="receipt-big ${clr}">${site.total > 0 ? Math.round(site.online/site.total*100)+"%" : "—"}</div>
-        <div class="receipt-label"><strong>${site.status === "online" ? "All devices up" : site.status === "partial" ? `${site.offline} device${site.offline!==1?"s":""} disconnected` : "No devices yet"}</strong>${site.name}</div>
-      </div>
-      <div class="receipt-section">Devices by type</div>${rows}
-      <div class="source-line">&#128203; <code>GET /orgs/{id}/stats/devices?status=all</code></div>`,
-      site.status !== "pending"
-        ? `<a class="drawer-btn-primary" href="/troubleshoot/${ORG_ID}">Troubleshoot →</a>` : "",
-    );
-  }
+  el.innerHTML = summary + (siteCards || `<div style="padding:20px;color:var(--muted);font-size:13px;text-align:center">No sites found.</div>`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -744,7 +961,7 @@ function openDrawer(id) {
         ${c.name}
         ${c.optional ? `<span style="font-size:11px;color:var(--muted);margin-left:6px">optional</span>` : ""}
       </div>
-      <div class="receipt-row-val ${c.status === 'green' ? 'green' : c.status === 'red' ? 'red' : c.status === 'yellow' ? 'yellow' : 'muted'}">${c.status === 'green' ? 'Pass' : c.optional ? '—' : c.status === 'yellow' ? 'Warning' : 'Issue'}</div>
+      <div class="receipt-row-val ${c.status === 'green' ? 'green' : c.status === 'red' ? 'red' : c.status === 'yellow' ? 'yellow' : c.status === 'info' ? '' : 'muted'}" style="${c.status === 'info' ? 'color:#60a5fa' : ''}">${c.status === 'green' ? 'Pass' : c.status === 'info' ? 'Info' : c.optional ? '—' : c.status === 'yellow' ? 'Warning' : 'Issue'}</div>
     </div>`).join("");
     openDrawerContent("Readiness Score", "How we calculated your deployment readiness",
       `<div class="receipt-score">
@@ -873,37 +1090,6 @@ function openDrawer(id) {
     return;
   }
 
-  // ── Deploy drawers ──
-  if (id === "sites-online") {
-    const sites = dep.sites || [];
-    const rows  = sites.map(s => {
-      const clr = s.status === "online" ? "green" : s.status === "partial" ? "yellow" : "muted";
-      const val = s.status === "pending" ? "Pending" : `${s.online}/${s.total}`;
-      return `<div class="receipt-row">
-        <div class="receipt-row-name">${s.name}<div class="receipt-row-sub">${s.status === 'pending' ? 'No devices yet' : `${s.offline} offline`}</div></div>
-        <div class="receipt-row-val ${clr}">${val}</div></div>`;
-    }).join("");
-    openDrawerContent("Sites Online", `${dep.sites_online} of ${dep.sites_total} sites active`,
-      `<div class="receipt-section">All sites</div>${rows}
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/stats/devices?status=all</code> · grouped by site</div>`, "");
-    return;
-  }
-
-  if (id === "devices-connected") {
-    const tot   = dep.totals || {};
-    const byType = tot.by_type || {};
-    openDrawerContent("Devices Connected", `${tot.devices_online||0} of ${tot.devices||0} devices online`,
-      `<div class="receipt-section">By type</div>
-       <div class="receipt-row"><div class="receipt-row-name">&#128225; Access Points</div><div class="receipt-row-val">${byType.ap||0}</div></div>
-       <div class="receipt-row"><div class="receipt-row-name">&#128268; Switches</div><div class="receipt-row-val">${byType.switch||0}</div></div>
-       <div class="receipt-row"><div class="receipt-row-name">&#127760; Gateways</div><div class="receipt-row-val">${byType.gateway||0}</div></div>
-       <div class="receipt-section">By status</div>
-       <div class="receipt-row"><div class="receipt-row-name">Online</div><div class="receipt-row-val green">${tot.devices_online||0}</div></div>
-       <div class="receipt-row"><div class="receipt-row-name">Offline</div><div class="receipt-row-val ${(tot.devices||0)-(tot.devices_online||0)>0?"red":"muted"}">${(tot.devices||0)-(tot.devices_online||0)}</div></div>
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/stats/devices?status=all&limit=1000</code></div>`,
-      `<a class="drawer-btn-primary" href="/inventory/${ORG_ID}">View Inventory →</a>`);
-    return;
-  }
 }
 
 // ── Operate drawers ───────────────────────────────────────────────────────────

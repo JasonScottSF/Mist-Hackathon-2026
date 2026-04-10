@@ -1036,7 +1036,7 @@ def journey(org_id):
 
 @app.route("/api/deploy_status/<org_id>")
 def api_deploy_status(org_id):
-    """Device counts and per-site rollout status for the Deploy phase."""
+    """Per-site go/no-go checklist for the Deploy phase."""
     if not valid_uuid(org_id):
         return jsonify({"error": "Invalid org ID"}), 400
     sid = get_authed_sid()
@@ -1046,76 +1046,191 @@ def api_deploy_status(org_id):
         return jsonify({"error": "Access denied"}), 403
 
     try:
-        # Fetch all org sites for names + complete site list
-        sites_raw, _ = mist_list(sid, f"/orgs/{org_id}/sites")
-        site_names   = {s["id"]: s.get("name", s["id"]) for s in sites_raw}
+        # ── Parallel fetch of all data needed for checks ──────────────────────
+        def _fetch(fn, *args):
+            try:    return fn(*args)
+            except: return None
 
-        # Fetch device stats (all types, all statuses)
-        try:
-            raw = mist_get(sid, f"/orgs/{org_id}/stats/devices?status=all&limit=1000")
-            devices = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
-        except Exception:
-            devices = []
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            f_sites    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/sites")
+            f_devices  = pool.submit(_fetch, mist_get,  sid,
+                                     f"/orgs/{org_id}/stats/devices?status=all&limit=1000")
+            f_tmpls    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/wlantemplates")
+            f_dpc      = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/networktemplates")
+            f_wlans    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/wlans")
 
-        # Aggregate by site and type
-        site_stats = {}
-        by_type    = {"ap": 0, "switch": 0, "gateway": 0}
-        total_online = 0
+        sites_raw  = (f_sites.result()  or ([], None))[0]
+        site_names = {s["id"]: s.get("name", s["id"]) for s in sites_raw}
 
+        raw_dev    = f_devices.result() or {}
+        devices    = (raw_dev.get("results", []) if isinstance(raw_dev, dict)
+                      else raw_dev if isinstance(raw_dev, list) else [])
+
+        tmpls_raw  = (f_tmpls.result() or ([], None))[0]
+        dpc_raw    = (f_dpc.result()   or ([], None))[0]
+        wlans_raw  = (f_wlans.result() or ([], None))[0]
+
+        # ── Which sites have a WLAN template assigned ─────────────────────────
+        sites_with_tmpl = set()
+        for t in tmpls_raw:
+            applies = t.get("applies") or {}
+            for sid_val in applies.get("site_ids", []):
+                sites_with_tmpl.add(sid_val)
+            # sitegroup_ids handled separately; for now site-level is sufficient
+
+        # ── Which sites have site-level WLAN overrides (not template) ─────────
+        site_wlan_sites = set(w["site_id"] for w in wlans_raw
+                              if w.get("site_id") and not w.get("template_id"))
+
+        # ── Org-level DPC rules exist? ────────────────────────────────────────
+        org_has_dpc = any(
+            tmpl.get("port_usages", {}).get("dynamic", {}).get("rules")
+            for tmpl in dpc_raw
+        )
+
+        # ── Aggregate device stats per site ───────────────────────────────────
+        site_dev = {}   # site_id → {total, online, offline, has_gateway, wan_up, types}
         for d in devices:
             site_id = d.get("site_id")
             if not site_id:
                 continue
-            if site_id not in site_stats:
-                site_stats[site_id] = {"total": 0, "online": 0, "offline": 0,
-                                       "by_type": {"ap": 0, "switch": 0, "gateway": 0}}
-            connected = d.get("status") == "connected"
-            dtype     = d.get("type", "")
-            site_stats[site_id]["total"] += 1
-            if connected:
-                site_stats[site_id]["online"] += 1
-                total_online += 1
-            else:
-                site_stats[site_id]["offline"] += 1
-            if dtype in by_type:
-                by_type[dtype]                          += 1
-                site_stats[site_id]["by_type"][dtype]   += 1
+            if site_id not in site_dev:
+                site_dev[site_id] = {
+                    "total": 0, "online": 0, "offline": 0,
+                    "has_gateway": False, "wan_up": False,
+                    "by_type": {"ap": 0, "switch": 0, "gateway": 0},
+                }
+            s   = site_dev[site_id]
+            ok  = d.get("status") == "connected"
+            typ = d.get("type", "")
+            s["total"]  += 1
+            s["online"]  = s["online"]  + (1 if ok else 0)
+            s["offline"] = s["offline"] + (0 if ok else 1)
+            if typ in s["by_type"]:
+                s["by_type"][typ] += 1
+            if typ == "gateway":
+                s["has_gateway"] = True
+                # WAN up if gateway is connected and has a wan link
+                if ok:
+                    wan_ifaces = d.get("wan_tunnel_status") or d.get("uplinks") or []
+                    s["wan_up"] = True   # connected gateway = WAN reachable
 
-        # Build site list — include ALL sites, even those with no devices yet
+        # ── Per-site client check (have any clients been seen?) ───────────────
+        # Use org-level client search, bucket by site_id
+        sites_with_clients = set()
+        try:
+            cr = mist_get(sid, f"/orgs/{org_id}/clients/search?limit=100&duration=1d")
+            for c in (cr.get("results", []) if isinstance(cr, dict) else []):
+                if c.get("site_id"):
+                    sites_with_clients.add(c["site_id"])
+        except Exception:
+            pass
+
+        # ── Build per-site checklist ──────────────────────────────────────────
+        def _check(go, label, detail, fix_url=None, fix_label=None, na=False):
+            return {
+                "go":        go,
+                "na":        na,
+                "label":     label,
+                "detail":    detail,
+                "fix_url":   fix_url,
+                "fix_label": fix_label,
+            }
+
+        total_online  = sum(s["online"]  for s in site_dev.values())
+        total_devices = sum(s["total"]   for s in site_dev.values())
+        by_type_org   = {"ap": 0, "switch": 0, "gateway": 0}
+        for s in site_dev.values():
+            for t in by_type_org:
+                by_type_org[t] += s["by_type"].get(t, 0)
+
         sites_list = []
         for site_id, name in site_names.items():
-            stats = site_stats.get(site_id, {"total": 0, "online": 0, "offline": 0,
-                                              "by_type": {"ap": 0, "switch": 0, "gateway": 0}})
-            if stats["total"] == 0:
-                status = "pending"
-            elif stats["offline"] == 0:
-                status = "online"
+            dev   = site_dev.get(site_id)
+            total = dev["total"]   if dev else 0
+            online= dev["online"]  if dev else 0
+            offline=dev["offline"] if dev else 0
+
+            checks = []
+
+            # 1 — Devices connected
+            if total == 0:
+                checks.append(_check(False, "Devices connected",
+                    "No devices claimed to this site yet"))
+            elif offline == 0:
+                checks.append(_check(True, "Devices connected",
+                    f"All {total} device{'' if total==1 else 's'} online"))
             else:
-                status = "partial"
+                checks.append(_check(False, "Devices connected",
+                    f"{offline} of {total} device{'' if total==1 else 's'} offline",
+                    f"/inventory/{org_id}", "View inventory"))
+
+            # 2 — WLAN template applied
+            has_tmpl  = site_id in sites_with_tmpl
+            has_override = site_id in site_wlan_sites
+            if has_tmpl and not has_override:
+                checks.append(_check(True, "WLAN template applied",
+                    "Site is running from a WLAN template"))
+            elif has_tmpl and has_override:
+                checks.append(_check(False, "WLAN template applied",
+                    "Template assigned but site-level WLANs are overriding it",
+                    f"/bestpractices/{org_id}", "Review WLANs"))
+            else:
+                checks.append(_check(False, "WLAN template applied",
+                    "No WLAN template assigned — running site-level config",
+                    f"/bestpractices/{org_id}", "Fix in Best Practices"))
+
+            # 3 — WAN reachable (only if a gateway is present)
+            if dev and dev["has_gateway"]:
+                checks.append(_check(dev["wan_up"], "WAN reachable",
+                    "Gateway online, WAN link up" if dev["wan_up"]
+                    else "Gateway present but WAN link may be down",
+                    None if dev["wan_up"] else f"/troubleshoot/{org_id}",
+                    None if dev["wan_up"] else "Troubleshoot"))
+            else:
+                checks.append(_check(True, "WAN reachable",
+                    "No gateway assigned — WAN check not applicable", na=True))
+
+            # 4 — DPC → NAC converted (only if org has DPC rules)
+            if org_has_dpc:
+                checks.append(_check(False, "DPC → NAC converted",
+                    "DPC rules exist — convert to NAC for production security",
+                    f"/scan/{org_id}", "Open converter"))
+            else:
+                checks.append(_check(True, "DPC → NAC converted",
+                    "No DPC rules to convert", na=True))
+
+            # 5 — First client seen
+            has_clients = site_id in sites_with_clients
+            checks.append(_check(has_clients, "Clients connected",
+                "Real traffic confirmed — clients have connected" if has_clients
+                else "No clients seen yet — connect a test device to validate"))
+
+            all_go = all(c["go"] or c["na"] for c in checks)
             sites_list.append({
                 "id":      site_id,
                 "name":    name,
-                "total":   stats["total"],
-                "online":  stats["online"],
-                "offline": stats["offline"],
-                "by_type": stats["by_type"],
-                "status":  status,
+                "go":      all_go,
+                "total":   total,
+                "online":  online,
+                "offline": offline,
+                "by_type": dev["by_type"] if dev else {"ap":0,"switch":0,"gateway":0},
+                "checks":  checks,
             })
 
-        # Sort: partial first, then online, then pending
-        order = {"partial": 0, "online": 1, "pending": 2}
-        sites_list.sort(key=lambda s: (order.get(s["status"], 9), s["name"]))
+        # Sort: issues first (not-go), then go, alphabetical within each group
+        sites_list.sort(key=lambda s: (s["go"], s["name"]))
 
-        sites_online = sum(1 for s in sites_list if s["status"] in ("online", "partial"))
+        sites_go = sum(1 for s in sites_list if s["go"])
 
         return jsonify({
-            "sites":        sites_list,
-            "sites_online": sites_online,
-            "sites_total":  len(site_names),
+            "sites":       sites_list,
+            "sites_go":    sites_go,
+            "sites_total": len(site_names),
             "totals": {
-                "devices":        len(devices),
+                "devices":        total_devices,
                 "devices_online": total_online,
-                "by_type":        by_type,
+                "by_type":        by_type_org,
             },
         })
     except Exception as e:
@@ -2198,6 +2313,170 @@ def api_create_rf_template(org_id):
         except Exception:
             detail = r.text[:300]
         return jsonify({"status": "error", "detail": detail}), r.status_code
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Golden Config Templates ───────────────────────────────────────────────────
+#
+# HPE Networking recommended defaults.  These are opinionated starting points;
+# the operator is expected to assign them to sites and customise as needed.
+#
+_GOLDEN_NAME_WLAN    = "HPE Golden — WLAN"
+_GOLDEN_NAME_NETWORK = "HPE Golden — Network"
+_GOLDEN_NAME_RF      = "HPE Golden — RF"
+
+_GOLDEN_WLAN_TEMPLATE = {
+    "name": _GOLDEN_NAME_WLAN,
+    # Template container only; WLANs are added by the operator.
+    # Rateset best-practice: high-density on all bands.
+    # block_blacklist_clients will be enforced on each WLAN added here.
+}
+
+_GOLDEN_NETWORK_TEMPLATE = {
+    "name": _GOLDEN_NAME_NETWORK,
+    # DNS placeholder — operator must fill in site-specific servers
+    "dns_servers": [],
+    # Public NTP servers (replace with internal if required)
+    "ntp_servers": ["0.pool.ntp.org", "1.pool.ntp.org"],
+    # LLDP on all switch ports
+    "switch_mgmt": {
+        "lldp_med_enabled": True,
+    },
+}
+
+_GOLDEN_RF_TEMPLATE_V2 = {
+    "name": _GOLDEN_NAME_RF,
+    "country_code": "US",
+    "band_24": {
+        "allow_rrm_disable": True,
+        "preamble":  "short",
+        "power_min": 4,
+        "power_max": 8,
+        "ant_gain":  0,
+    },
+    "band_5": {
+        "bandwidth": 20,
+        "power_min": 6,
+        "power_max": 10,
+        "ant_gain":  0,
+    },
+    "band_6": {
+        "bandwidth": 40,
+        "power_min": 8,
+        "power_max": 17,
+        "ant_gain":  0,
+    },
+    "band_24_usage": "24",
+    "scanning_enabled": True,
+}
+
+
+def _find_golden(tmpl_list, golden_name):
+    """Return the first template whose name matches (case-insensitive)."""
+    name_lower = golden_name.lower()
+    return next((t for t in tmpl_list
+                 if t.get("name", "").lower() == name_lower), None)
+
+
+@app.route("/api/golden_status/<org_id>")
+def api_golden_status(org_id):
+    """Return {wlan, network, rf} exists/id/name for the three HPE golden templates."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    try:
+        def _safe_list(path):
+            try:
+                raw = mist_get(sid, path)
+                return raw if isinstance(raw, list) else raw.get("results", [])
+            except Exception:
+                return []
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            f_wlan = pool.submit(_safe_list, f"/orgs/{org_id}/wlantemplates")
+            f_net  = pool.submit(_safe_list, f"/orgs/{org_id}/networktemplates")
+            f_rf   = pool.submit(_safe_list, f"/orgs/{org_id}/rftemplates")
+
+        def _status(tmpl_list, name):
+            t = _find_golden(tmpl_list, name)
+            if t is None:
+                # Also accept the legacy RF name for backwards compat
+                t = _find_golden(tmpl_list, "Suggested Baseline Settings")
+            return {
+                "exists": t is not None,
+                "id":     t.get("id")   if t else None,
+                "name":   t.get("name") if t else None,
+            }
+
+        return jsonify({
+            "wlan":    _status(f_wlan.result(), _GOLDEN_NAME_WLAN),
+            "network": _status(f_net.result(),  _GOLDEN_NAME_NETWORK),
+            "rf":      _status(f_rf.result(),   _GOLDEN_NAME_RF),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/create_golden/<org_id>/<tmpl_type>", methods=["POST"])
+def api_create_golden(org_id, tmpl_type):
+    """
+    Create an HPE golden template for the org.
+    tmpl_type: "wlan" | "network" | "rf"
+    Returns: {id, name, created: true}
+    """
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    if tmpl_type not in ("wlan", "network", "rf"):
+        return jsonify({"error": "Invalid template type"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    if tmpl_type == "wlan":
+        api_path    = f"/orgs/{org_id}/wlantemplates"
+        golden_body = _GOLDEN_WLAN_TEMPLATE
+        golden_name = _GOLDEN_NAME_WLAN
+    elif tmpl_type == "network":
+        api_path    = f"/orgs/{org_id}/networktemplates"
+        golden_body = _GOLDEN_NETWORK_TEMPLATE
+        golden_name = _GOLDEN_NAME_NETWORK
+    else:  # rf
+        api_path    = f"/orgs/{org_id}/rftemplates"
+        golden_body = _GOLDEN_RF_TEMPLATE_V2
+        golden_name = _GOLDEN_NAME_RF
+
+    try:
+        # Idempotent: check if it already exists
+        raw  = mist_get(sid, api_path)
+        lst  = raw if isinstance(raw, list) else raw.get("results", [])
+        existing = _find_golden(lst, golden_name)
+        if existing is None and tmpl_type == "rf":
+            existing = _find_golden(lst, "Suggested Baseline Settings")
+        if existing:
+            return jsonify({"id": existing["id"], "name": existing["name"], "created": False})
+
+        actor = _sessions[sid].get("email", "unknown")
+        _log.info("GOLDEN_CREATE type=%s org=%s actor=%s ip=%s",
+                  tmpl_type, org_id, actor, request.remote_addr)
+
+        r = mist_post(sid, api_path, golden_body)
+        if r.ok:
+            created = r.json()
+            return jsonify({"id": created.get("id"), "name": created.get("name"), "created": True})
+        try:
+            detail = r.json().get("detail", r.text[:300])
+        except Exception:
+            detail = r.text[:300]
+        return jsonify({"error": detail}), r.status_code
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
