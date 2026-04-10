@@ -997,49 +997,70 @@ function openDrawer(id) {
   }
 
   if (id === "data-rates") {
-    const drWlans  = d.wlans || [];
-    const tmpl     = drWlans.filter(w => w.in_template);
-    const legacy   = tmpl.filter(w => Object.values(w.rateset||{}).some(b => b && b.template !== "high-density"));
-    const good     = tmpl.filter(w => !legacy.includes(w));
-    const siteOnly = drWlans.filter(w => !w.in_template);
-    function ratesetSummary(w) {
-      return Object.entries(w.rateset||{}).map(([band,b]) =>
-        `${band} GHz: ${b?.template||"—"}`).join(" · ");
+    const drWlans = d.wlans || [];
+
+    function bandSummary(w) {
+      const parts = [];
+      if ((w.bands||[]).includes("24") || w.band_24) parts.push(`2.4 GHz: ${w.band_24||"—"}`);
+      if ((w.bands||[]).includes("5")  || w.band_5)  parts.push(`5 GHz: ${w.band_5||"—"}`);
+      if ((w.bands||[]).includes("6")  || w.band_6)  parts.push(`6 GHz: ${w.band_6||"—"}`);
+      return parts.join(" · ") || "No band info";
     }
-    const legacyRows = legacy.map(w => `<div class="receipt-row">
-      <div class="receipt-row-name"><strong>${w.ssid}</strong><div class="receipt-row-sub">${w.template_name||""} · ${ratesetSummary(w)}</div></div>
-      <div class="receipt-row-val yellow">Legacy</div></div>`).join("");
-    const goodRows = good.map(w => `<div class="receipt-row">
-      <div class="receipt-row-name">${w.ssid}<div class="receipt-row-sub">${w.template_name||""}</div></div>
-      <div class="receipt-row-val green">High Density</div></div>`).join("");
-    const siteRows2 = siteOnly.map(w => `<div class="receipt-row">
-      <div class="receipt-row-name">${w.ssid}<div class="receipt-row-sub">Site WLAN — not fixed by this tool</div></div>
-      <div class="receipt-row-val muted">Site only</div></div>`).join("");
-    openDrawerContent("Data Rates", "Legacy rates reduce airtime efficiency in high-density environments",
-      `${legacyRows ? `<div class="receipt-section">Affected WLANs</div>${legacyRows}` : ""}
-       ${goodRows   ? `<div class="receipt-section">Passing WLANs</div>${goodRows}` : ""}
-       ${siteRows2  ? `<div class="receipt-section">Site-only WLANs (flagged only)</div>${siteRows2}` : ""}
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/wlans/{id}</code> · <code>rateset[band][template]</code> · fetched individually</div>`,
-      legacy.length > 0 ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix data rates →</a>` : "");
+
+    function isLegacy(w) {
+      const rates = [w.band_24, w.band_5, w.band_6].filter(Boolean);
+      return rates.length > 0 && rates.some(r => r !== "high-density");
+    }
+
+    function rateClr(w)   { return w.high_density ? "green" : isLegacy(w) ? "yellow" : "muted"; }
+    function rateLabel(w) { return w.high_density ? "High Density" : isLegacy(w) ? "Legacy" : "Default"; }
+
+    const tmplWlans = drWlans.filter(w =>  w.in_template);
+    const siteWlans = drWlans.filter(w => !w.in_template);
+
+    function wlanRow(w, scope) {
+      const sub = scope === "site"
+        ? `${w.site_name || "Site WLAN"} · ${bandSummary(w)}`
+        : `${w.template_name || "Template"} · ${bandSummary(w)}`;
+      return `<div class="receipt-row">
+        <div class="receipt-row-name"><strong>${w.ssid}</strong><div class="receipt-row-sub">${sub}</div></div>
+        <div class="receipt-row-val ${rateClr(w)}">${rateLabel(w)}</div></div>`;
+    }
+
+    const tmplRows = tmplWlans.map(w => wlanRow(w, "tmpl")).join("");
+    const siteRows2 = siteWlans.map(w => wlanRow(w, "site")).join("");
+    const hasLegacy = drWlans.some(isLegacy);
+
+    openDrawerContent("Data Rates", "high-density disables legacy 802.11b/g rates, improving airtime efficiency",
+      `${tmplRows   ? `<div class="receipt-section">Template WLANs</div>${tmplRows}` : ""}
+       ${siteRows2  ? `<div class="receipt-section">Site-only WLANs</div>${siteRows2}` : ""}
+       ${!tmplRows && !siteRows2 ? '<div class="empty-receipt">No WLAN data found.</div>' : ""}
+       <div class="source-line">&#128203; <code>GET /orgs/{id}/wlans/{id}</code> · <code>rateset[band][template]</code></div>`,
+      hasLegacy ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix data rates →</a>` : "");
     return;
   }
 
   if (id === "banned-clients") {
-    const wlans   = b.wlans || [];
-    const tmpl    = wlans.filter(w => w.template_id);
-    const missing = tmpl.filter(w => !w.block_blacklist_clients);
-    const good    = tmpl.filter(w =>  w.block_blacklist_clients);
-    const missingRows = missing.map(w => `<div class="receipt-row">
-      <div class="receipt-row-name">${w.ssid}<div class="receipt-row-sub">${w.template_name||"Template"}</div></div>
-      <div class="receipt-row-val yellow">Not enabled</div></div>`).join("");
-    const goodRows = good.map(w => `<div class="receipt-row">
-      <div class="receipt-row-name">${w.ssid}</div>
-      <div class="receipt-row-val green">Enabled</div></div>`).join("");
-    openDrawerContent("Banned Client Protection", "block_blacklist_clients field per WLAN",
-      `${missingRows ? `<div class="receipt-section">Missing protection</div>${missingRows}` : ""}
-       ${goodRows    ? `<div class="receipt-section">Protected</div>${goodRows}` : ""}
+    const wlans = b.wlans || [];
+    const tmpl  = wlans.filter(w => w.template_id);
+    const rows  = tmpl.map(w => {
+      const on  = w.block_blacklist_clients;
+      const box = on
+        ? `<div class="gonogo-checkbox go"  style="display:inline-flex;width:16px;height:16px;border-radius:3px;font-size:10px;align-items:center;justify-content:center;border:1.5px solid rgba(34,197,94,0.4);background:rgba(34,197,94,0.15);color:var(--green);flex-shrink:0">✓</div>`
+        : `<div class="gonogo-checkbox nogo" style="display:inline-flex;width:16px;height:16px;border-radius:3px;font-size:10px;align-items:center;justify-content:center;border:1.5px solid rgba(239,68,68,0.35);background:rgba(239,68,68,0.12);color:var(--red);flex-shrink:0">✕</div>`;
+      return `<div class="receipt-row" style="align-items:center;gap:10px">
+        ${box}
+        <div class="receipt-row-name" style="flex:1"><strong>${w.ssid}</strong>
+          <div class="receipt-row-sub">${w.template_name||"Template"}</div></div>
+        <div class="receipt-row-val ${on ? "green" : "red"}">${on ? "Enabled" : "Not set"}</div>
+      </div>`;
+    }).join("");
+    const missing = tmpl.filter(w => !w.block_blacklist_clients).length;
+    openDrawerContent("Banned Client Protection",
+      missing === 0 ? `All ${tmpl.length} WLANs protected` : `${missing} of ${tmpl.length} WLANs missing protection`,
+      `${rows || '<div class="empty-receipt">No template WLANs found.</div>'}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/wlantemplates/{id}/wlans</code> · <code>block_blacklist_clients</code></div>`,
-      missing.length > 0 ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix →</a>` : "");
+      missing > 0 ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix →</a>` : "");
     return;
   }
 
