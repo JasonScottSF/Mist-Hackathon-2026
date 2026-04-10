@@ -1688,10 +1688,12 @@ def api_bestpractices(org_id):
                 "limit_bcast":               bool(w.get("limit_bcast", False)),
                 "limit_probe_response":      bool(w.get("limit_probe_response", False)),
                 "no_legacy":                 bool(w.get("no_legacy", False)),
-                "block_blacklist_clients": bool(w.get("block_blacklist_clients", False)),
+                "block_blacklist_clients":   bool(w.get("block_blacklist_clients", False)),
                 "scope":                     scope,
                 "scope_id":                  scope_id,
                 "site_name":                 site_name,
+                "template_id":               w.get("template_id", ""),
+                "template_name":             w.get("template_name", ""),
             })
         return out
 
@@ -1782,7 +1784,8 @@ def api_bestpractices(org_id):
                 "total":     len(tmpl_details),
                 "ntp_count": sum(1 for t in tmpl_details if t["has_ntp"]),
                 "dns_count": sum(1 for t in tmpl_details if t["has_dns"]),
-                "templates": [{"name":        t["name"],
+                "templates": [{"id":          t["id"],
+                               "name":        t["name"],
                                "has_ntp":     t["has_ntp"],
                                "ntp_servers": t["ntp_servers"],
                                "has_dns":     t["has_dns"],
@@ -1809,6 +1812,7 @@ def api_bestpractices(org_id):
                     ntp_servers = detail.get("ntp_servers") or []
                     dns_servers = detail.get("dns_servers") or []
                     return {
+                        "id":          tmpl_id,
                         "name":        detail.get("name", tmpl.get("name", tmpl_id)),
                         "ntp_servers": ntp_servers,
                         "dns_servers": dns_servers,
@@ -1833,6 +1837,8 @@ def api_bestpractices(org_id):
                 "dns_count": sum(1 for t in wan_details if t["has_dns"]),
                 "templates": wan_details,
             }
+            # Also return total raw template count (includes templates with no details fetched)
+            wan_dns_ntp_info["template_count"] = len(wan_tmpls)
         except Exception as e:
             _log.warning("WAN template DNS/NTP check failed: %s", e)
             wan_dns_ntp_info = {"total": 0, "ntp_count": 0, "dns_count": 0,
@@ -1845,7 +1851,7 @@ def api_bestpractices(org_id):
         aa_info       = {}
 
         def _fetch_subs():
-            return mist_get(sid, f"/orgs/{org_id}/subscriptions")
+            return mist_get(sid, f"/orgs/{org_id}/licenses")
 
         def _fetch_setting():
             return mist_get(sid, f"/orgs/{org_id}/setting")
@@ -1863,11 +1869,17 @@ def api_bestpractices(org_id):
                 f_nac     = pool.submit(_fetch_nacrules)
                 f_rf      = pool.submit(_fetch_rftemplates)
 
-            subs_raw = f_subs.result()
-            subs = subs_raw if isinstance(subs_raw, list) else subs_raw.get("results", [])
+            lic_data  = f_subs.result()
+            lic_list  = lic_data.get("licenses", [])
+            entitled  = lic_data.get("entitled", {})   # {type: total_owned}
+            summary   = lic_data.get("summary",  {})   # {type: total_assigned}
 
+            cloud_host  = _sessions[sid].get("cloud_host", "api.mist.com")
+            manage_host = cloud_host.replace("api.", "manage.", 1)
+
+            # Build individual license rows for display
             processed = []
-            for s in subs:
+            for s in lic_list:
                 end = s.get("end_time", 0)
                 if not end or end > now + WARN_DAYS * 86400:
                     st = "active"
@@ -1876,25 +1888,37 @@ def api_bestpractices(org_id):
                 else:
                     st = "expired"
                 processed.append({
-                    "type":               s.get("type", "Unknown"),
-                    "quantity":           s.get("quantity", 0),
-                    "remaining_quantity": s.get("remaining_quantity"),
-                    "end_time":           end,
-                    "status":             st,
+                    "type":     s.get("type", "Unknown"),
+                    "quantity": s.get("quantity", 0),
+                    "end_time": end,
+                    "status":   st,
                 })
-            processed.sort(key=lambda s: (s["status"] != "expired", s["status"] != "expiring", s["type"].lower()))
+            processed.sort(key=lambda s: (s["status"] != "active", s["status"] != "expiring", s["type"].lower()))
 
-            def _is_exceeded(s):
-                rq = s.get("remaining_quantity")
-                return rq is not None and rq <= 0 and s["status"] != "expired"
+            # Seat detail: compare entitled (owned) vs summary (assigned to devices)
+            seat_detail = []
+            for sub_type in sorted(set(entitled) | set(summary)):
+                total = entitled.get(sub_type, 0)
+                used  = summary.get(sub_type, 0)
+                seat_detail.append({
+                    "type":  sub_type,
+                    "total": total,
+                    "used":  used,
+                    "free":  total - used,
+                })
+
+            exceeded_subs = [s for s in seat_detail if s["free"] < 0]
 
             licenses_info = {
-                "total":    len(processed),
-                "active":   sum(1 for s in processed if s["status"] == "active"),
-                "expiring": sum(1 for s in processed if s["status"] == "expiring"),
-                "expired":  sum(1 for s in processed if s["status"] == "expired"),
-                "exceeded": sum(1 for s in processed if _is_exceeded(s)),
+                "total":         len(processed),
+                "active":        sum(1 for s in processed if s["status"] == "active"),
+                "expiring":      sum(1 for s in processed if s["status"] == "expiring"),
+                "expired":       sum(1 for s in processed if s["status"] == "expired"),
+                "exceeded":      len(exceeded_subs),
                 "subscriptions": processed,
+                "seat_detail":   seat_detail,
+                "seat_mismatch": len(exceeded_subs) > 0,
+                "manage_host":   manage_host,
             }
 
             # Access Assurance — look for AA subscription type
@@ -1959,14 +1983,14 @@ def api_bestpractices(org_id):
             rf_info = {"exists": False, "error": str(e)}
 
         return jsonify({
-            "wlans":        result,
-            "filters":      BP_FILTERS,
-            "dpc":          dpc_info,
-            "dns_ntp":      dns_ntp_info,
-            "wan_dns_ntp":  wan_dns_ntp_info,
-            "licenses":     licenses_info,
-            "aa":           aa_info,
-            "rf":           rf_info,
+            "wlans":       result,
+            "filters":     BP_FILTERS,
+            "dpc":         dpc_info,
+            "dns_ntp":     dns_ntp_info,
+            "wan_dns_ntp": wan_dns_ntp_info,
+            "licenses":    licenses_info,
+            "aa":          aa_info,
+            "rf":          rf_info,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2073,10 +2097,13 @@ def api_datarates(org_id):
             w = mist_get(sid, f"/orgs/{org_id}/wlans/{wlan_id}")
             rateset = w.get("rateset", {})
             bands   = w.get("bands", [])
-            band_24 = rateset.get("24", {}).get("template", "compatible")
-            band_5  = rateset.get("5",  {}).get("template", "compatible")
-            band_6  = rateset.get("6",  {}).get("template", "compatible")
-            _log.info("DATARATES_FETCH wlan=%s ssid=%s rateset=%s", wlan_id, w.get("ssid"), rateset)
+            # Only expose rates for active bands; use None for inactive bands
+            # so the frontend doesn't factor them into worst-rate calculation
+            active  = set(bands) if bands else (set(rateset.keys()) or {"24", "5"})
+            band_24 = rateset.get("24", {}).get("template", "compatible") if "24" in active else None
+            band_5  = rateset.get("5",  {}).get("template", "compatible") if "5"  in active else None
+            band_6  = rateset.get("6",  {}).get("template", "compatible") if "6"  in active else None
+            _log.info("DATARATES_FETCH wlan=%s ssid=%s bands=%s rateset=%s", wlan_id, w.get("ssid"), bands, rateset)
             return {
                 "id":          wlan_id,
                 "ssid":        w.get("ssid", "Unnamed"),
@@ -2092,7 +2119,7 @@ def api_datarates(org_id):
                 "bands":       bands,
                 "high_density": all(
                     rateset.get(b, {}).get("template", "compatible") == "high-density"
-                    for b in bands if b in rateset
+                    for b in active if b in rateset
                 ) and bool(rateset),
             }
         except Exception as e:
@@ -2109,6 +2136,7 @@ def api_datarates(org_id):
             w = mist_get(sid, f"/sites/{site_id}/wlans/{wlan_id}")
             rateset = w.get("rateset", {})
             bands   = w.get("bands", [])
+            active  = set(bands) if bands else (set(rateset.keys()) or {"24", "5"})
             wlans.append({
                 "id":          wlan_id,
                 "ssid":        w.get("ssid", "Unnamed"),
@@ -2118,11 +2146,14 @@ def api_datarates(org_id):
                 "site_name":   site_name,
                 "template_id": "",
                 "in_template": False,
-                "band_24":     rateset.get("24", {}).get("template", "compatible"),
-                "band_5":      rateset.get("5",  {}).get("template", "compatible"),
-                "band_6":      rateset.get("6",  {}).get("template", "compatible"),
+                "band_24":     rateset.get("24", {}).get("template", "compatible") if "24" in active else None,
+                "band_5":      rateset.get("5",  {}).get("template", "compatible") if "5"  in active else None,
+                "band_6":      rateset.get("6",  {}).get("template", "compatible") if "6"  in active else None,
                 "bands":       bands,
-                "high_density": False,
+                "high_density": all(
+                    rateset.get(b, {}).get("template", "compatible") == "high-density"
+                    for b in active if b in rateset
+                ) and bool(rateset),
             })
         except Exception:
             pass
@@ -2148,12 +2179,18 @@ def api_datarates_apply(org_id, wlan_id):
     if not org_allowed(org_id):
         return jsonify({"error": "Access denied"}), 403
 
-    data = request.json or {}
-    # Only allow changes to org-level template WLANs
-    if data.get("scope") == "site":
-        return jsonify({"error": "Site-level WLANs must be managed via a WLAN template"}), 400
+    data     = request.json or {}
+    scope    = data.get("scope", "org")
+    scope_id = data.get("scope_id", org_id)
 
-    path = f"/orgs/{org_id}/wlans/{wlan_id}"
+    if scope not in ("org", "site"):
+        return jsonify({"error": "Invalid scope"}), 400
+    if scope == "site":
+        if not valid_uuid(scope_id):
+            return jsonify({"error": "Invalid scope_id for site WLAN"}), 400
+        path = f"/sites/{scope_id}/wlans/{wlan_id}"
+    else:
+        path = f"/orgs/{org_id}/wlans/{wlan_id}"
 
     try:
         wlan    = mist_get(sid, path)
@@ -2171,8 +2208,8 @@ def api_datarates_apply(org_id, wlan_id):
         wlan["rateset"] = new_rateset
 
         actor = _sessions[sid].get("email", "unknown")
-        _log.info("DATARATES wlan=%s ssid=%s new_rateset=%s actor=%s ip=%s",
-                  wlan_id, wlan.get("ssid", ""), new_rateset, actor, request.remote_addr)
+        _log.info("DATARATES scope=%s wlan=%s ssid=%s new_rateset=%s actor=%s ip=%s",
+                  scope, wlan_id, wlan.get("ssid", ""), new_rateset, actor, request.remote_addr)
 
         r = mist_put(sid, path, wlan)
         _log.info("DATARATES PUT status=%s body=%s", r.status_code, r.text[:500])
@@ -2204,6 +2241,96 @@ def api_list_wlantemplates(org_id):
                      for t in (raw if isinstance(raw, list) else raw.get("results", []))
                      if t.get("id")]
         return jsonify({"templates": templates})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dnsntp/<org_id>/<tmpl_id>", methods=["POST"])
+def api_dnsntp_apply(org_id, tmpl_id):
+    """Set dns_servers and/or ntp_servers on a network template."""
+    if not valid_uuid(org_id) or not valid_uuid(tmpl_id):
+        return jsonify({"error": "Invalid ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    data        = request.json or {}
+    dns_servers = data.get("dns_servers")   # list[str] or None
+    ntp_servers = data.get("ntp_servers")   # list[str] or None
+
+    if dns_servers is None and ntp_servers is None:
+        return jsonify({"error": "Provide dns_servers and/or ntp_servers"}), 400
+
+    try:
+        path  = f"/orgs/{org_id}/networktemplates/{tmpl_id}"
+        tmpl  = mist_get(sid, path)
+        if dns_servers is not None:
+            tmpl["dns_servers"] = [s.strip() for s in dns_servers if s.strip()]
+        if ntp_servers is not None:
+            tmpl["ntp_servers"] = [s.strip() for s in ntp_servers if s.strip()]
+
+        actor = _sessions[sid].get("email", "unknown")
+        _log.info("DNSNTP tmpl=%s dns=%s ntp=%s actor=%s ip=%s",
+                  tmpl_id, tmpl.get("dns_servers"), tmpl.get("ntp_servers"),
+                  actor, request.remote_addr)
+
+        r = mist_put(sid, path, tmpl)
+        if r.ok:
+            return jsonify({"status": "applied",
+                            "dns_servers": tmpl.get("dns_servers"),
+                            "ntp_servers": tmpl.get("ntp_servers")})
+        try:
+            detail = r.json().get("detail", r.text[:300])
+        except Exception:
+            detail = r.text[:300]
+        return jsonify({"status": "error", "detail": detail}), r.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/wan_dnsntp/<org_id>/<tmpl_id>", methods=["POST"])
+def api_wan_dnsntp_apply(org_id, tmpl_id):
+    """Set dns_servers and/or ntp_servers on a gateway (WAN) template."""
+    if not valid_uuid(org_id) or not valid_uuid(tmpl_id):
+        return jsonify({"error": "Invalid ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    data        = request.json or {}
+    dns_servers = data.get("dns_servers")
+    ntp_servers = data.get("ntp_servers")
+
+    if dns_servers is None and ntp_servers is None:
+        return jsonify({"error": "Provide dns_servers and/or ntp_servers"}), 400
+
+    try:
+        path = f"/orgs/{org_id}/gatewaytemplates/{tmpl_id}"
+        tmpl = mist_get(sid, path)
+        if dns_servers is not None:
+            tmpl["dns_servers"] = [s.strip() for s in dns_servers if s.strip()]
+        if ntp_servers is not None:
+            tmpl["ntp_servers"] = [s.strip() for s in ntp_servers if s.strip()]
+
+        actor = _sessions[sid].get("email", "unknown")
+        _log.info("WAN_DNSNTP tmpl=%s dns=%s ntp=%s actor=%s ip=%s",
+                  tmpl_id, tmpl.get("dns_servers"), tmpl.get("ntp_servers"),
+                  actor, request.remote_addr)
+
+        r = mist_put(sid, path, tmpl)
+        if r.ok:
+            return jsonify({"status": "applied",
+                            "dns_servers": tmpl.get("dns_servers"),
+                            "ntp_servers": tmpl.get("ntp_servers")})
+        try:
+            detail = r.json().get("detail", r.text[:300])
+        except Exception:
+            detail = r.text[:300]
+        return jsonify({"status": "error", "detail": detail}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -94,7 +94,10 @@
     .check-info        { flex: 1; min-width: 0; }
     .check-name        { font-size: 13px; font-weight: 500; }
     .check-detail      { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .check-action      { font-size: 12px; font-weight: 600; color: var(--purple-lt); white-space: nowrap; flex-shrink: 0; }
+    .check-action      { font-size: 11px; font-weight: 600; color: var(--purple-lt); white-space: nowrap; flex-shrink: 0; padding: 3px 10px; border-radius: 5px; border: 1.5px solid rgba(167,139,250,0.35); background: rgba(167,139,250,0.08); transition: background 0.15s, border-color 0.15s; }
+    .inline-input      { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-size: 12px; padding: 4px 8px; outline: none; }
+    .inline-input:focus { border-color: var(--purple-lt); }
+    .check-row:hover .check-action { background: rgba(167,139,250,0.16); border-color: rgba(167,139,250,0.55); }
     .check-badge       { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
     .badge-green  { background: rgba(34,197,94,0.12);  color: var(--green); }
     .badge-yellow { background: rgba(234,179,8,0.12);  color: var(--yellow); }
@@ -600,9 +603,9 @@ function calcPlanChecks() {
 
   const checks = [];
 
-  // WLAN templates
-  const tmplWlans = wlans.filter(w => w.template_id);
-  const siteWlans = wlans.filter(w => !w.template_id);
+  // WLAN templates — org-level WLANs (scope=org) are template-managed
+  const tmplWlans = wlans.filter(w => w.scope === "org");
+  const siteWlans = wlans.filter(w => w.scope === "site");
   checks.push({
     id: "wlan-templates",
     name: "WLAN templates configured",
@@ -611,7 +614,6 @@ function calcPlanChecks() {
       ? `${tmplWlans.length} template WLAN${tmplWlans.length!==1?"s":""}${siteWlans.length>0?` · ${siteWlans.length} site-only`:""}`
       : "No WLANs configured in templates",
     actionLabel: siteWlans.length > 0 ? "Fix →" : null,
-    actionUrl: `/bestpractices/${ORG_ID}`,
   });
 
   // Data rates — use flat band fields from the API (not w.rateset which is unused)
@@ -628,11 +630,11 @@ function calcPlanChecks() {
     detail: notHighDensity.length > 0
       ? `${notHighDensity.length} WLAN${notHighDensity.length!==1?"s":""} not on high density`
       : "All active WLANs on high density",
-    actionLabel: null,
+    actionLabel: notHighDensity.length > 0 ? "Fix →" : null,
   });
 
   // Banned clients
-  const missingBan = wlans.filter(w => w.template_id && !w.block_blacklist_clients);
+  const missingBan = wlans.filter(w => w.scope === "org" && !w.block_blacklist_clients);
   checks.push({
     id: "banned-clients",
     name: "Banned client protection",
@@ -641,7 +643,6 @@ function calcPlanChecks() {
       ? `${missingBan.length} WLAN${missingBan.length!==1?"s":""} missing protection`
       : "Enabled on all WLANs",
     actionLabel: missingBan.length > 0 ? "Fix →" : null,
-    actionUrl: `/bestpractices/${ORG_ID}`,
   });
 
   // DNS / NTP
@@ -656,8 +657,7 @@ function calcPlanChecks() {
     detail: noNtp.length > 0 ? `${noNtp.length} template${noNtp.length!==1?"s":""} missing NTP`
           : noDns.length > 0 ? `${noDns.length} template${noDns.length!==1?"s":""} missing DNS`
           : tmpls.length > 0 ? "All templates configured" : "No network templates found",
-    actionLabel: !dnsOk ? "Fix →" : null,
-    actionUrl: `/bestpractices/${ORG_ID}`,
+    actionLabel: !dnsOk && tmpls.length > 0 ? "Fix →" : null,
   });
 
   // Licenses
@@ -679,6 +679,28 @@ function calcPlanChecks() {
     actionLabel: null,
   });
 
+  // WAN gateway templates
+  const wanInfo    = bp.wan_dns_ntp || {};
+  const wanTmpls   = wanInfo.templates || [];
+  const wanTotal   = wanInfo.template_count ?? wanTmpls.length;
+  const wanMissDns = wanTmpls.filter(t => !t.has_dns);
+  const wanMissNtp = wanTmpls.filter(t => !t.has_ntp);
+  const wanIssues  = wanMissDns.length > 0 || wanMissNtp.length > 0;
+  checks.push({
+    id: "wan-templates",
+    name: "Gateway templates",
+    status: wanTotal === 0 ? "muted"
+          : wanIssues   ? "yellow"
+          : "green",
+    detail: wanTotal === 0
+          ? "No gateway templates — gateways use site-level config"
+          : wanIssues
+            ? `${wanMissDns.length > 0 ? wanMissDns.length + " missing DNS" : ""}${wanMissDns.length && wanMissNtp.length ? " · " : ""}${wanMissNtp.length > 0 ? wanMissNtp.length + " missing NTP" : ""}`
+            : `${wanTotal} template${wanTotal!==1?"s":""} configured`,
+    optional: wanTotal === 0,
+    actionLabel: wanIssues ? "Fix →" : null,
+  });
+
   // DPC (informational)
   checks.push({
     id: "dpc-plan",
@@ -688,7 +710,7 @@ function calcPlanChecks() {
       ? `${dpc.rule_count} rule${dpc.rule_count!==1?"s":""} across ${dpc.template_count} template${dpc.template_count!==1?"s":""}`
       : "No DPC rules — configure before deployment or skip to NAC",
     optional: !dpc.has_rules,
-    actionLabel: null,
+    actionLabel: !dpc.has_rules ? "Set up →" : null,
   });
 
   const required = checks.filter(c => !c.optional);
@@ -712,6 +734,7 @@ function renderPlan() {
 
   const wireless = checks.filter(c => ["wlan-templates","data-rates","banned-clients"].includes(c.id));
   const wired    = checks.filter(c => ["dns-ntp","dpc-plan"].includes(c.id));
+  const wan      = checks.filter(c => ["wan-templates"].includes(c.id));
   const org      = checks.filter(c => ["licenses"].includes(c.id));
 
   function rowHtml(c) {
@@ -752,7 +775,8 @@ function renderPlan() {
     </div>
     <div id="golden-section">${goldenSectionHtml()}</div>
     ${groupHtml("Wireless", "var(--blue)", wireless)}
-    ${groupHtml("Wired", "#10b981", wired)}
+    ${groupHtml("Wired / Switching", "#10b981", wired)}
+    ${groupHtml("WAN / SD-WAN", "#f97316", wan)}
     ${groupHtml("Organization", "var(--purple-lt)", org)}`;
 
   // Mark Plan phase badge as done if all good
@@ -980,17 +1004,25 @@ function openDrawer(id) {
 
   if (id === "wlan-templates") {
     const wlans    = b.wlans || [];
-    const tmpl     = wlans.filter(w => w.template_id);
-    const site     = wlans.filter(w => !w.template_id);
+    const tmpl     = wlans.filter(w => w.scope === "org");
+    const site     = wlans.filter(w => w.scope === "site");
     const tmplRows = tmpl.map(w => `<div class="receipt-row">
-      <div class="receipt-row-name">${w.ssid}<div class="receipt-row-sub">${w.template_name || "Template"}</div></div>
+      <div class="receipt-row-name">${w.ssid}<div class="receipt-row-sub">${w.template_name || "Org template"}</div></div>
       <div class="receipt-row-val green">Template</div></div>`).join("");
-    const siteRows = site.map(w => `<div class="receipt-row">
-      <div class="receipt-row-name">${w.ssid}<div class="receipt-row-sub">${w.site_name || "Site WLAN"}</div></div>
-      <div class="receipt-row-val yellow">Site only</div></div>`).join("");
+    const siteRows = site.map(w => {
+      const siteId = (w.scope_id || "").replace(/'/g, "\\'");
+      const siteName = (w.site_name || "Site WLAN").replace(/'/g, "\\'");
+      return `<div class="receipt-row" style="align-items:center">
+        <div class="receipt-row-name" style="flex:1">${w.ssid}<div class="receipt-row-sub">${w.site_name || "Site WLAN"}</div></div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div class="receipt-row-val yellow">Site only</div>
+          <button id="wt-fix-${w.id}" class="gonogo-fix" onclick="convertToTemplate('${w.id}','${siteId}','${siteName}')">Move to Template</button>
+        </div></div>`;
+    }).join("");
     openDrawerContent("WLAN Templates", `${tmpl.length} template WLANs${site.length > 0 ? ` · ${site.length} site-only` : ""}`,
       `${tmplRows ? `<div class="receipt-section">Template WLANs</div>${tmplRows}` : ""}
-       ${siteRows ? `<div class="receipt-section">Site-only WLANs (not in a template)</div>${siteRows}` : ""}
+       ${siteRows ? `<div class="receipt-section">Site-only WLANs</div>${siteRows}` : ""}
+       ${!tmplRows && !siteRows ? '<div class="empty-receipt">No WLANs found.</div>' : ""}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/wlantemplates</code> + <code>GET /orgs/{id}/wlans</code></div>`,
       "");
     return;
@@ -1043,16 +1075,19 @@ function openDrawer(id) {
     }
 
     const tmplWlans = drWlans.filter(w =>  w.in_template);
-    const siteWlans = drWlans.filter(w => !w.in_template);
+    const orgWlans  = drWlans.filter(w => !w.in_template && w.scope === "org");
+    const siteWlans = drWlans.filter(w => !w.in_template && w.scope === "site");
 
-    function wlanRow(w, scope) {
+    function wlanRow(w) {
       const disabled = w.enabled === false;
-      const canFix   = !disabled && scope === "tmpl" && worstRate(w) !== "high-density";
+      const canFix   = !disabled && worstRate(w) !== "high-density";
       const nameStyle = disabled ? "color:var(--red)" : "";
       const disabledTag = disabled
         ? ` <span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25);vertical-align:middle">Disabled</span>`
         : "";
-      const context = scope === "site" ? w.site_name || "Site WLAN" : w.template_name || "Template";
+      const context = w.scope === "site"
+        ? w.site_name || "Site WLAN"
+        : w.template_name || (w.in_template ? "Template" : "Org WLAN");
       const sub = `${context} · ${bandSummary(w)}`;
       const fixBtn = canFix
         ? `<button id="dr-fix-${w.id}" class="gonogo-fix" onclick="setHighDensity('${w.id}','${w.scope||'org'}','${w.scope_id||ORG_ID}')">Set High Density</button>`
@@ -1068,13 +1103,15 @@ function openDrawer(id) {
         </div></div>`;
     }
 
-    const tmplRows  = tmplWlans.map(w => wlanRow(w, "tmpl")).join("");
-    const siteRows2 = siteWlans.map(w => wlanRow(w, "site")).join("");
+    const tmplRows  = tmplWlans.map(w => wlanRow(w)).join("");
+    const orgRows   = orgWlans.map(w  => wlanRow(w)).join("");
+    const siteRows2 = siteWlans.map(w => wlanRow(w)).join("");
 
     openDrawerContent("Data Rates", "high-density disables legacy 802.11b/g rates, improving airtime efficiency",
       `${tmplRows   ? `<div class="receipt-section">Template WLANs</div>${tmplRows}` : ""}
-       ${siteRows2  ? `<div class="receipt-section">Site-only WLANs (read-only)</div>${siteRows2}` : ""}
-       ${!tmplRows && !siteRows2 ? '<div class="empty-receipt">No WLAN data found.</div>' : ""}
+       ${orgRows    ? `<div class="receipt-section">Org WLANs</div>${orgRows}` : ""}
+       ${siteRows2  ? `<div class="receipt-section">Site WLANs</div>${siteRows2}` : ""}
+       ${!tmplRows && !orgRows && !siteRows2 ? '<div class="empty-receipt">No WLAN data found.</div>' : ""}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/wlans/{id}</code> · <code>rateset[band][template]</code></div>`,
       "");
     return;
@@ -1082,7 +1119,7 @@ function openDrawer(id) {
 
   if (id === "banned-clients") {
     const wlans = b.wlans || [];
-    const tmpl  = wlans.filter(w => w.template_id);
+    const tmpl  = wlans.filter(w => w.scope === "org");
     const rows  = tmpl.map(w => {
       const on  = w.block_blacklist_clients;
       const box = on
@@ -1111,21 +1148,46 @@ function openDrawer(id) {
   }
 
   if (id === "dns-ntp") {
-    const tmpls  = (b.dns_ntp || {}).templates || [];
-    const rows   = tmpls.map(t => {
-      const dns  = (t.dns_servers  || []).join(", ") || "—";
-      const ntp  = (t.ntp_servers  || []).join(", ") || "—";
-      const ok   = dns !== "—" && ntp !== "—";
-      return `<div class="receipt-row">
-        <div class="receipt-row-name"><strong>${t.name}</strong>
-          <div class="receipt-row-sub">DNS: ${dns} · NTP: ${ntp}</div></div>
-        <div class="receipt-row-val ${ok?"green":"red"}">${ok?"Good":"Incomplete"}</div></div>`;
+    const tmpls = (b.dns_ntp || {}).templates || [];
+    const rows  = tmpls.map(t => {
+      const dns   = (t.dns_servers || []).join(", ") || "";
+      const ntp   = (t.ntp_servers || []).join(", ") || "";
+      const hasDns = !!dns;
+      const hasNtp = !!ntp;
+      const ok     = hasDns && hasNtp;
+      const fixSection = !ok ? `
+        <div style="margin-top:10px;padding:10px 0 4px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+          ${!hasDns ? `<div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--muted);width:36px;flex-shrink:0">DNS</span>
+            <input id="dns-input-${t.id}" class="inline-input" placeholder="8.8.8.8, 8.8.4.4" value="" style="flex:1"/>
+          </div>` : ""}
+          ${!hasNtp ? `<div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--muted);width:36px;flex-shrink:0">NTP</span>
+            <input id="ntp-input-${t.id}" class="inline-input" placeholder="0.pool.ntp.org, 1.pool.ntp.org" value="" style="flex:1"/>
+          </div>` : ""}
+          <div style="display:flex;justify-content:flex-end">
+            <button id="dnsntp-fix-${t.id}" class="gonogo-fix" onclick="applyDnsNtp('${t.id}',${!hasDns},${!hasNtp})">Apply</button>
+          </div>
+        </div>` : "";
+      return `<div class="receipt-row" style="flex-direction:column;align-items:stretch">
+        <div style="display:flex;align-items:center">
+          <div class="receipt-row-name" style="flex:1"><strong>${t.name}</strong>
+            <div class="receipt-row-sub">
+              ${hasDns ? `DNS: ${dns}` : '<span style="color:var(--red)">DNS: not set</span>'}
+              &nbsp;·&nbsp;
+              ${hasNtp ? `NTP: ${ntp}` : '<span style="color:var(--red)">NTP: not set</span>'}
+            </div>
+          </div>
+          <div class="receipt-row-val ${ok?"green":"red"}">${ok?"Good":"Incomplete"}</div>
+        </div>
+        ${fixSection}
+      </div>`;
     }).join("");
     openDrawerContent("DNS & NTP Servers", "Per network template configuration",
       `<div class="receipt-section">Network templates</div>
        ${rows || '<div class="empty-receipt">No network templates found.</div>'}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/networktemplates/{id}</code> · <code>dns_servers</code>, <code>ntp_servers</code></div>`,
-      `<a class="drawer-btn-secondary" href="https://${state.health?.manage_host||'manage.mist.com'}" target="_blank">Configure in Mist ↗</a>`);
+      "");
     return;
   }
 
@@ -1134,28 +1196,124 @@ function openDrawer(id) {
     return;
   }
 
-  if (id === "licenses") {
-    const lic  = b.licenses || {};
-    const subs = lic.subscriptions || [];
-    function fmtDate(ts) { if (!ts) return "No expiry"; return new Date(ts*1000).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}); }
-    const rows = subs.map(s => {
-      const isExceeded = s.remaining_quantity != null && s.remaining_quantity <= 0 && s.status !== "expired";
-      const clr   = s.status === "expired" ? "red" : isExceeded ? "red" : s.status === "expiring" ? "yellow" : "green";
-      const label = s.status === "expired" ? "Expired" : isExceeded ? "Exceeded" : s.status === "expiring" ? "Expiring" : "Active";
-      const qty   = s.quantity != null ? `${s.quantity} seats` : "";
-      const rem   = s.remaining_quantity != null ? ` · ${s.remaining_quantity} remaining` : "";
-      return `<div class="receipt-row">
-        <div class="receipt-row-name"><strong>${s.type||"Subscription"}</strong>
-          <div class="receipt-row-sub">${qty}${rem} · Expires: ${fmtDate(s.end_time)}</div></div>
-        <div class="receipt-row-val ${clr}">${label}</div></div>`;
+  if (id === "wan-templates") {
+    const wanTmpls = (b.wan_dns_ntp || {}).templates || [];
+    const wanTotal = (b.wan_dns_ntp || {}).template_count ?? wanTmpls.length;
+    const rows = wanTmpls.map(t => {
+      const dns    = (t.dns_servers || []).join(", ") || "";
+      const ntp    = (t.ntp_servers || []).join(", ") || "";
+      const hasDns = !!dns;
+      const hasNtp = !!ntp;
+      const ok     = hasDns && hasNtp;
+      const fixSection = !ok ? `
+        <div style="margin-top:10px;padding:10px 0 4px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+          ${!hasDns ? `<div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--muted);width:36px;flex-shrink:0">DNS</span>
+            <input id="wan-dns-input-${t.id}" class="inline-input" placeholder="8.8.8.8, 8.8.4.4" style="flex:1"/>
+          </div>` : ""}
+          ${!hasNtp ? `<div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--muted);width:36px;flex-shrink:0">NTP</span>
+            <input id="wan-ntp-input-${t.id}" class="inline-input" placeholder="0.pool.ntp.org, 1.pool.ntp.org" style="flex:1"/>
+          </div>` : ""}
+          <div style="display:flex;justify-content:flex-end">
+            <button id="wan-fix-${t.id}" class="gonogo-fix" onclick="applyWanDnsNtp('${t.id}',${!hasDns},${!hasNtp})">Apply</button>
+          </div>
+        </div>` : "";
+      return `<div class="receipt-row" style="flex-direction:column;align-items:stretch">
+        <div style="display:flex;align-items:center">
+          <div class="receipt-row-name" style="flex:1"><strong>${t.name}</strong>
+            <div class="receipt-row-sub">
+              ${hasDns ? `DNS: ${dns}` : '<span style="color:var(--red)">DNS: not set</span>'}
+              &nbsp;·&nbsp;
+              ${hasNtp ? `NTP: ${ntp}` : '<span style="color:var(--red)">NTP: not set</span>'}
+            </div>
+          </div>
+          <div class="receipt-row-val ${ok?"green":"red"}">${ok?"Good":"Incomplete"}</div>
+        </div>
+        ${fixSection}
+      </div>`;
     }).join("");
+    const missing = wanTmpls.filter(t => !t.has_dns || !t.has_ntp).length;
+    openDrawerContent("Gateway Templates",
+      wanTotal === 0
+        ? "No gateway templates configured"
+        : `${wanTotal} template${wanTotal!==1?"s":""}${missing > 0 ? ` · ${missing} incomplete` : " · all configured"}`,
+      `${wanTotal === 0
+          ? '<div class="empty-receipt">No gateway templates found — gateways are running site-level config.</div>'
+          : `<div class="receipt-section">Gateway templates</div>${rows}`}
+       <div class="source-line">&#128203; <code>GET /orgs/{id}/gatewaytemplates/{id}</code> · <code>dns_servers</code>, <code>ntp_servers</code></div>`,
+      "");
+    return;
+  }
+
+  if (id === "licenses") {
+    const lic          = b.licenses || {};
+    const subs         = lic.subscriptions || [];
+    const seatDetail   = lic.seat_detail   || [];
+    const seatMismatch = lic.seat_mismatch || false;
+
+    // Mist SKU → display name (matches Mist portal labels)
+    const SKU_NAMES = {
+      "SUB-VNA":    "Wireless Assurance",
+      "SUB-SVNA":   "Wireless Assurance (Site)",
+      "SUB-SVNA4":  "Wireless Assurance (Site, 4-AP)",
+      "SUB-MAN":    "Mist Management",
+      "SUB-AST":    "Wired Assurance",
+      "SUB-ENG":    "Marvis for Wired",
+      "SUB-EX12":   "Wired Assurance (EX12xx)",
+      "SUB-EX24":   "Wired Assurance (EX24xx)",
+      "SUB-EX48":   "Wired Assurance (EX48xx)",
+      "SUB-ME":     "Mist Edge",
+      "SUB-PMA":    "Premium Analytics",
+      "SUB-AA":     "Access Assurance",
+      "SUB-WAN3":   "WAN Assurance",
+      "SUB-SRX3":   "WAN Assurance (SRX3xx)",
+      "SUB-WVNA3":  "Marvis for WAN",
+    };
+    const skuName = sku => SKU_NAMES[sku] || sku;
+
+    function fmtDate(ts) {
+      if (!ts) return "No expiry";
+      return new Date(ts * 1000).toLocaleDateString(undefined, {year:"numeric",month:"short",day:"numeric"});
+    }
+
+    // Group individual license records by type for inline breakdown
+    const subsByType = {};
+    subs.forEach(s => { (subsByType[s.type] = subsByType[s.type] || []).push(s); });
+
+    // ── Seat usage rows with inline license breakdown ─────────────────────
+    const seatRows = seatDetail.map(s => {
+      const over = s.free < 0;
+      const clr  = over ? "red" : s.free === 0 ? "yellow" : "green";
+      const pct  = s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
+
+      const licLines = (subsByType[s.type] || []).map(lic => {
+        const lclr = lic.status === "expired" ? "var(--red)" : lic.status === "expiring" ? "var(--yellow)" : "var(--muted)";
+        const lbl  = lic.status === "expired" ? "Expired" : lic.status === "expiring" ? "Expiring" : "Active";
+        return `<div style="display:flex;justify-content:space-between;padding:2px 0 0 10px;font-size:11px;color:var(--muted)">
+          <span>${lic.quantity} seat${lic.quantity!==1?"s":""} · Exp ${fmtDate(lic.end_time)}</span>
+          <span style="color:${lclr}">${lbl}</span>
+        </div>`;
+      }).join("");
+
+      return `<div class="receipt-row" style="align-items:flex-start">
+        <div class="receipt-row-name" style="flex:1">
+          <strong>${skuName(s.type)}</strong>
+          <div class="receipt-row-sub">${s.type} · ${s.used} of ${s.total} assigned (${pct}%)${over ? ` · <span style="color:var(--red)">${Math.abs(s.free)} over limit</span>` : ` · ${s.free} free`}</div>
+          ${licLines}
+        </div>
+        <div class="receipt-row-val ${clr}" style="margin-top:2px">${over ? "Exceeded" : s.free === 0 ? "Full" : "OK"}</div>
+      </div>`;
+    }).join("");
+
     const subtitle = subs.length === 0
       ? "No subscriptions — API token access is not affected"
-      : `${subs.length} subscription${subs.length!==1?"s":""}`;
+      : `${seatDetail.length} subscription type${seatDetail.length!==1?"s":""}${seatMismatch ? " · ⚠ seats exceeded" : ""}`;
+
+    const empty = '<div class="empty-receipt">No subscriptions found — API token access is not subscription-dependent.</div>';
     openDrawerContent("Subscriptions", subtitle,
-      `${rows || '<div class="empty-receipt">No subscriptions found — API token access is not subscription-dependent.</div>'}
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/subscriptions</code></div>`,
-      `<a class="drawer-btn-secondary" href="https://${state.health?.manage_host||'manage.mist.com'}" target="_blank">View in Mist ↗</a>`);
+      `${seatDetail.length > 0 ? `<div class="receipt-section">Seat usage</div>${seatRows}` : empty}
+       <div class="source-line">&#128203; <code>GET /orgs/{id}/licenses</code></div>`);
     return;
   }
 
@@ -1174,9 +1332,9 @@ async function setHighDensity(wlanId, scope, scopeId) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
-    // Update local state
-    const w = (state.dr?.wlans || []).find(w => w.id === wlanId);
-    if (w) { w.band_24 = "high-density"; w.band_5 = "high-density"; w.band_6 = "high-density"; w.high_density = true; }
+    // Re-fetch actual state from API so active-band data is accurate
+    const drRes = await fetch(`/api/datarates/${ORG_ID}`);
+    if (drRes.ok) state.dr = await drRes.json();
     openDrawer("data-rates");   // re-render drawer
     renderPlan();               // refresh check row
   } catch(e) {
@@ -1200,6 +1358,93 @@ async function enableBannedClients(wlanId, scope, scopeId) {
     const w = (state.bp?.wlans || []).find(w => w.id === wlanId);
     if (w) w.block_blacklist_clients = true;
     openDrawer("banned-clients"); // re-render drawer
+    renderPlan();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
+    alert(`Failed: ${e.message}`);
+  }
+}
+
+async function applyWanDnsNtp(tmplId, needsDns, needsNtp) {
+  const btn = document.getElementById(`wan-fix-${tmplId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Applying…"; }
+  const body = {};
+  if (needsDns) {
+    const val = (document.getElementById(`wan-dns-input-${tmplId}`)?.value || "").trim();
+    if (!val) { alert("Enter at least one DNS server."); if (btn) { btn.disabled = false; btn.textContent = "Apply"; } return; }
+    body.dns_servers = val.split(/[,\s]+/).filter(Boolean);
+  }
+  if (needsNtp) {
+    const val = (document.getElementById(`wan-ntp-input-${tmplId}`)?.value || "").trim();
+    if (!val) { alert("Enter at least one NTP server."); if (btn) { btn.disabled = false; btn.textContent = "Apply"; } return; }
+    body.ntp_servers = val.split(/[,\s]+/).filter(Boolean);
+  }
+  try {
+    const res = await fetch(`/api/wan_dnsntp/${ORG_ID}/${tmplId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    const bpRes = await fetch(`/api/bestpractices/${ORG_ID}`);
+    if (bpRes.ok) state.bp = await bpRes.json();
+    openDrawer("wan-templates");
+    renderPlan();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Apply"; }
+    alert(`Failed: ${e.message}`);
+  }
+}
+
+async function applyDnsNtp(tmplId, needsDns, needsNtp) {
+  const btn = document.getElementById(`dnsntp-fix-${tmplId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Applying…"; }
+  const body = {};
+  if (needsDns) {
+    const val = (document.getElementById(`dns-input-${tmplId}`)?.value || "").trim();
+    if (!val) { alert("Enter at least one DNS server."); if (btn) { btn.disabled = false; btn.textContent = "Apply"; } return; }
+    body.dns_servers = val.split(/[,\s]+/).filter(Boolean);
+  }
+  if (needsNtp) {
+    const val = (document.getElementById(`ntp-input-${tmplId}`)?.value || "").trim();
+    if (!val) { alert("Enter at least one NTP server."); if (btn) { btn.disabled = false; btn.textContent = "Apply"; } return; }
+    body.ntp_servers = val.split(/[,\s]+/).filter(Boolean);
+  }
+  try {
+    const res = await fetch(`/api/dnsntp/${ORG_ID}/${tmplId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    // Re-fetch bp state so drawer refreshes with new values
+    const bpRes = await fetch(`/api/bestpractices/${ORG_ID}`);
+    if (bpRes.ok) state.bp = await bpRes.json();
+    openDrawer("dns-ntp");
+    renderPlan();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Apply"; }
+    alert(`Failed: ${e.message}`);
+  }
+}
+
+async function convertToTemplate(wlanId, siteId, siteName) {
+  const btn = document.getElementById(`wt-fix-${wlanId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Converting…"; }
+  try {
+    const res = await fetch(`/api/convert_wlan/${ORG_ID}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wlan_id: wlanId, site_id: siteId, site_name: siteName }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    // Re-fetch bp state so the WLAN now appears as org-scoped
+    const bpRes = await fetch(`/api/bestpractices/${ORG_ID}`);
+    if (bpRes.ok) state.bp = await bpRes.json();
+    openDrawer("wlan-templates");
     renderPlan();
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
@@ -1252,31 +1497,113 @@ function _renderDpcDrawer() {
     const endpoints = scan.proposed_endpoints || [];
     const sources   = scan.sources            || [];
 
+    // ── Source templates ──────────────────────────────────────────────────
     const srcRows = sources.map(s => `
       <div class="receipt-row">
         <div class="receipt-row-name">${s.template_name}
-          <div class="receipt-row-sub">${s.rules.length} rule${s.rules.length!==1?"s":""}</div>
+          <div class="receipt-row-sub">${s.rules.length} DPC rule${s.rules.length!==1?"s":""}</div>
         </div>
         <div class="receipt-row-val green">Ready</div>
       </div>`).join("");
+
+    // ── Tags ──────────────────────────────────────────────────────────────
+    const classifierTags = tags.filter(t => t.tag_role === "classifier");
+    const resultTags     = tags.filter(t => t.tag_role === "result");
+
+    const tagRows = tags.map(t => {
+      const roleClr   = t.tag_role === "classifier" ? "blue" : "purple";
+      const roleLabel = t.tag_role === "classifier" ? "Classifier" : "Result";
+      const roleBadge = `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;
+        background:${t.tag_role==="classifier"?"rgba(96,165,250,0.12)":"rgba(167,139,250,0.12)"};
+        color:${t.tag_role==="classifier"?"#60a5fa":"var(--purple-lt)"};
+        border:1px solid ${t.tag_role==="classifier"?"rgba(96,165,250,0.3)":"rgba(167,139,250,0.3)"}">${roleLabel}</span>`;
+      let detail = t.note || "";
+      if (t.type === "match" && t.values?.length)
+        detail = `Matches: ${t.values.slice(0,3).join(", ")}${t.values.length>3?" …":""}`;
+      else if (t.type === "vlan" && t.vlan)
+        detail = `Assigns VLAN ${t.vlan}`;
+      return `<div class="receipt-row" style="align-items:center;gap:10px">
+        <div class="receipt-row-name" style="flex:1">
+          <strong>${t.name}</strong>
+          <div class="receipt-row-sub">${detail}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          ${roleBadge}
+          <div class="receipt-row-val muted" style="font-size:11px">${t.type||""}</div>
+        </div>
+      </div>`;
+    }).join("");
+
+    // ── Rules ─────────────────────────────────────────────────────────────
+    const ruleRows = rules.map(r => {
+      const classifiers = (r.classifier_tags||[]).join(", ") || "—";
+      const results     = (r.result_tags||[]).join(", ")     || "—";
+      const vlanBadge   = r.vlan
+        ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;
+            background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)">
+            VLAN ${r.vlan}</span>`
+        : "";
+      return `<div class="receipt-row" style="flex-direction:column;align-items:stretch;gap:4px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:var(--muted);width:24px;flex-shrink:0">#${r.order}</span>
+          <strong style="flex:1">${r.name}</strong>
+          ${vlanBadge}
+        </div>
+        <div style="padding-left:32px;font-size:11px;color:var(--muted);line-height:1.6">
+          <span style="color:var(--text)">If:</span> ${classifiers}<br>
+          <span style="color:var(--text)">Then:</span> ${results||"allow"}
+        </div>
+      </div>`;
+    }).join("");
+
+    // ── Endpoints ─────────────────────────────────────────────────────────
+    const endpointRows = endpoints.map(e => {
+      const typeBadge = `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;
+        background:rgba(234,179,8,0.12);color:var(--yellow);border:1px solid rgba(234,179,8,0.25)">${e.match_type||"Match"}</span>`;
+      return `<div class="receipt-row" style="align-items:center;gap:10px">
+        <div class="receipt-row-name" style="flex:1">
+          <strong>${e.name||e.mac_display||e.mac}</strong>
+          <div class="receipt-row-sub">${e.mac_display||e.mac} · matched on: <em>${e.matched_on||"—"}</em></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          ${typeBadge}
+          <div class="receipt-row-val muted" style="font-size:11px">${e.label||"—"}</div>
+        </div>
+      </div>`;
+    }).join("");
 
     const body = `
       <div class="receipt-score">
         <div class="receipt-big" style="color:var(--purple-lt)">${tags.length + rules.length + endpoints.length}</div>
         <div class="receipt-label"><strong>Objects to create</strong>
-          ${tags.length} tags · ${rules.length} rules · ${endpoints.length} endpoints</div>
+          ${tags.length} tag${tags.length!==1?"s":""} · ${rules.length} rule${rules.length!==1?"s":""} · ${endpoints.length} endpoint${endpoints.length!==1?"s":""}</div>
       </div>
+
       <div class="receipt-section">Source templates</div>
-      ${srcRows || '<div class="empty-receipt">No sources.</div>'}
-      <div class="receipt-section">Will create</div>
-      <div class="receipt-row"><div class="receipt-row-name">NAC Tags</div><div class="receipt-row-val">${tags.length}</div></div>
-      <div class="receipt-row"><div class="receipt-row-name">NAC Rules</div><div class="receipt-row-val">${rules.length}</div></div>
-      <div class="receipt-row"><div class="receipt-row-name">Endpoints (usermacs)</div><div class="receipt-row-val">${endpoints.length}</div></div>
+      ${srcRows || '<div class="empty-receipt">No sources found.</div>'}
+
+      <div class="receipt-section" style="margin-top:18px">
+        NAC Tags
+        <span style="margin-left:6px;font-size:11px;font-weight:400;color:var(--muted)">${classifierTags.length} classifier · ${resultTags.length} result</span>
+      </div>
+      ${tagRows || '<div class="empty-receipt">No tags to create.</div>'}
+
+      <div class="receipt-section" style="margin-top:18px">NAC Rules</div>
+      ${ruleRows || '<div class="empty-receipt">No rules to create.</div>'}
+
+      ${endpoints.length > 0 ? `
+      <div class="receipt-section" style="margin-top:18px">
+        Endpoints to register
+        <span style="margin-left:6px;font-size:11px;font-weight:400;color:var(--muted)">${endpoints.length} usermac${endpoints.length!==1?"s":""}</span>
+      </div>
+      ${endpointRows}` : ""}
+
       <div class="source-line">&#128203; <code>GET /api/scan/${ORG_ID}</code></div>`;
+
     const footer = `
       <button class="drawer-btn-primary" onclick="dpcApply()">Apply to Mist →</button>
-      <button class="drawer-btn-secondary" onclick="_dpc.phase='idle';_renderDpcDrawer()">Back</button>`;
-    openDrawerContent(title, "Review before applying", body, footer);
+      <button class="drawer-btn-secondary" onclick="_dpc.phase='idle';_renderDpcDrawer()">← Back</button>`;
+    openDrawerContent(title, `${tags.length + rules.length + endpoints.length} objects ready to create`, body, footer);
     return;
   }
 
