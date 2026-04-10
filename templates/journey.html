@@ -614,20 +614,26 @@ function calcPlanChecks() {
     actionUrl: `/bestpractices/${ORG_ID}`,
   });
 
-  // Data rates
-  const legacyWlans = drWlans.filter(w => {
-    if (!w.in_template) return false;
-    const rs = w.rateset || {};
-    return Object.values(rs).some(b => b && b.template !== "high-density");
-  });
+  // Data rates — use flat band fields from the API (not w.rateset which is unused)
+  function _wlanRateStatus(w) {
+    // Returns "high-density" | "compatible" | "mixed" | "unknown"
+    const rates = [w.band_24, w.band_5, w.band_6].filter(Boolean);
+    if (!rates.length) return "unknown";
+    if (rates.every(r => r === "high-density")) return "high-density";
+    if (rates.every(r => r === "compatible"))   return "compatible";
+    return "mixed";  // some bands high-density, some not
+  }
+  const notHighDensity = drWlans.filter(w =>
+    w.in_template && w.enabled !== false && _wlanRateStatus(w) !== "high-density"
+  );
   checks.push({
     id: "data-rates",
     name: "Data rates — high density",
-    status: legacyWlans.length === 0 ? "green" : "yellow",
-    detail: legacyWlans.length > 0
-      ? `${legacyWlans.length} WLAN${legacyWlans.length!==1?"s":""} using legacy rates`
-      : "All WLANs using high density",
-    actionLabel: legacyWlans.length > 0 ? "Fix →" : null,
+    status: notHighDensity.length === 0 ? "green" : "yellow",
+    detail: notHighDensity.length > 0
+      ? `${notHighDensity.length} WLAN${notHighDensity.length!==1?"s":""} not on high density`
+      : "All active WLANs using high density",
+    actionLabel: notHighDensity.length > 0 ? "Fix →" : null,
     actionUrl: `/bestpractices/${ORG_ID}`,
   });
 
@@ -1001,42 +1007,60 @@ function openDrawer(id) {
 
     function bandSummary(w) {
       const parts = [];
-      if ((w.bands||[]).includes("24") || w.band_24) parts.push(`2.4 GHz: ${w.band_24||"—"}`);
-      if ((w.bands||[]).includes("5")  || w.band_5)  parts.push(`5 GHz: ${w.band_5||"—"}`);
-      if ((w.bands||[]).includes("6")  || w.band_6)  parts.push(`6 GHz: ${w.band_6||"—"}`);
+      if ((w.bands||[]).includes("24") || w.band_24) parts.push(`2.4: ${w.band_24||"—"}`);
+      if ((w.bands||[]).includes("5")  || w.band_5)  parts.push(`5: ${w.band_5||"—"}`);
+      if ((w.bands||[]).includes("6")  || w.band_6)  parts.push(`6: ${w.band_6||"—"}`);
       return parts.join(" · ") || "No band info";
     }
 
-    function isLegacy(w) {
+    // "compatible" = legacy rates allowed but not forced — distinct from "high-density"
+    function rateStatus(w) {
       const rates = [w.band_24, w.band_5, w.band_6].filter(Boolean);
-      return rates.length > 0 && rates.some(r => r !== "high-density");
+      if (!rates.length) return "unknown";
+      if (rates.every(r => r === "high-density")) return "high-density";
+      if (rates.every(r => r === "compatible"))   return "compatible";
+      return "mixed";
     }
-
-    function rateClr(w)   { return w.high_density ? "green" : isLegacy(w) ? "yellow" : "muted"; }
-    function rateLabel(w) { return w.high_density ? "High Density" : isLegacy(w) ? "Legacy" : "Default"; }
+    function rateClr(w) {
+      if (w.enabled === false) return "muted";
+      const s = rateStatus(w);
+      return s === "high-density" ? "green" : s === "compatible" ? "yellow" : s === "mixed" ? "yellow" : "muted";
+    }
+    function rateLabel(w) {
+      if (w.enabled === false) return "Disabled";
+      const s = rateStatus(w);
+      return s === "high-density" ? "High Density" : s === "compatible" ? "Compatible" : s === "mixed" ? "Mixed" : "Default";
+    }
 
     const tmplWlans = drWlans.filter(w =>  w.in_template);
     const siteWlans = drWlans.filter(w => !w.in_template);
 
     function wlanRow(w, scope) {
-      const sub = scope === "site"
-        ? `${w.site_name || "Site WLAN"} · ${bandSummary(w)}`
-        : `${w.template_name || "Template"} · ${bandSummary(w)}`;
+      const disabled = w.enabled === false;
+      const nameStyle = disabled ? "color:var(--red)" : "";
+      const disabledTag = disabled
+        ? ` <span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25);vertical-align:middle">Disabled</span>`
+        : "";
+      const context = scope === "site" ? w.site_name || "Site WLAN" : w.template_name || "Template";
+      const sub = `${context} · ${bandSummary(w)}`;
       return `<div class="receipt-row">
-        <div class="receipt-row-name"><strong>${w.ssid}</strong><div class="receipt-row-sub">${sub}</div></div>
+        <div class="receipt-row-name">
+          <strong style="${nameStyle}">${w.ssid}</strong>${disabledTag}
+          <div class="receipt-row-sub">${sub}</div>
+        </div>
         <div class="receipt-row-val ${rateClr(w)}">${rateLabel(w)}</div></div>`;
     }
 
-    const tmplRows = tmplWlans.map(w => wlanRow(w, "tmpl")).join("");
+    const tmplRows  = tmplWlans.map(w => wlanRow(w, "tmpl")).join("");
     const siteRows2 = siteWlans.map(w => wlanRow(w, "site")).join("");
-    const hasLegacy = drWlans.some(isLegacy);
+    const needsFix  = drWlans.some(w => w.enabled !== false && rateStatus(w) !== "high-density");
 
     openDrawerContent("Data Rates", "high-density disables legacy 802.11b/g rates, improving airtime efficiency",
       `${tmplRows   ? `<div class="receipt-section">Template WLANs</div>${tmplRows}` : ""}
        ${siteRows2  ? `<div class="receipt-section">Site-only WLANs</div>${siteRows2}` : ""}
        ${!tmplRows && !siteRows2 ? '<div class="empty-receipt">No WLAN data found.</div>' : ""}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/wlans/{id}</code> · <code>rateset[band][template]</code></div>`,
-      hasLegacy ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix data rates →</a>` : "");
+      needsFix ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix data rates →</a>` : "");
     return;
   }
 
