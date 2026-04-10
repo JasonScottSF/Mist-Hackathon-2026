@@ -615,17 +615,12 @@ function calcPlanChecks() {
   });
 
   // Data rates — use flat band fields from the API (not w.rateset which is unused)
-  function _wlanRateStatus(w) {
-    // Returns "high-density" | "compatible" | "mixed" | "unknown"
+  // Only "high-density" is the HPE recommended setting
+  const notHighDensity = drWlans.filter(w => {
+    if (!w.in_template || w.enabled === false) return false;
     const rates = [w.band_24, w.band_5, w.band_6].filter(Boolean);
-    if (!rates.length) return "unknown";
-    if (rates.every(r => r === "high-density")) return "high-density";
-    if (rates.every(r => r === "compatible"))   return "compatible";
-    return "mixed";  // some bands high-density, some not
-  }
-  const notHighDensity = drWlans.filter(w =>
-    w.in_template && w.enabled !== false && _wlanRateStatus(w) !== "high-density"
-  );
+    return rates.length > 0 && !rates.every(r => r === "high-density");
+  });
   checks.push({
     id: "data-rates",
     name: "Data rates — high density",
@@ -1013,23 +1008,39 @@ function openDrawer(id) {
       return parts.join(" · ") || "No band info";
     }
 
-    // "compatible" = legacy rates allowed but not forced — distinct from "high-density"
-    function rateStatus(w) {
+    // Mist rate template values (per band):
+    //   "high-density" = disable all lower rates (best)
+    //   "no-legacy"    = 2.4G no 11b
+    //   "compatible"   = allow all connections (default)
+    //   "custom"       = custom rates (can't evaluate)
+    const RATE_LABEL = {
+      "high-density": "High Density",
+      "no-legacy":    "No Legacy",
+      "compatible":   "Compatible",
+      "custom":       "Custom",
+    };
+    const RATE_RANK = { "high-density": 3, "no-legacy": 2, "compatible": 1, "custom": 0 };
+
+    function worstRate(w) {
+      // Return the lowest-ranked rate across all active bands
       const rates = [w.band_24, w.band_5, w.band_6].filter(Boolean);
-      if (!rates.length) return "unknown";
-      if (rates.every(r => r === "high-density")) return "high-density";
-      if (rates.every(r => r === "compatible"))   return "compatible";
-      return "mixed";
+      if (!rates.length) return null;
+      return rates.reduce((worst, r) =>
+        (RATE_RANK[r] ?? 0) < (RATE_RANK[worst] ?? 0) ? r : worst
+      );
     }
     function rateClr(w) {
       if (w.enabled === false) return "muted";
-      const s = rateStatus(w);
-      return s === "high-density" ? "green" : s === "compatible" ? "yellow" : s === "mixed" ? "yellow" : "muted";
+      const r = worstRate(w);
+      if (r === "high-density") return "green";
+      if (r === "no-legacy")    return "yellow";
+      if (r === "compatible")   return "yellow";
+      return "muted";
     }
     function rateLabel(w) {
       if (w.enabled === false) return "Disabled";
-      const s = rateStatus(w);
-      return s === "high-density" ? "High Density" : s === "compatible" ? "Compatible" : s === "mixed" ? "Mixed" : "Default";
+      const r = worstRate(w);
+      return RATE_LABEL[r] || r || "Default";
     }
 
     const tmplWlans = drWlans.filter(w =>  w.in_template);
