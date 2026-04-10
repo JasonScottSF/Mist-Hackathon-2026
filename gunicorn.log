@@ -1,0 +1,6 @@
+[2026-04-09 20:51:39 -0700] [38155] [INFO] Starting gunicorn 23.0.0
+[2026-04-09 20:51:39 -0700] [38155] [INFO] Listening at: http://0.0.0.0:5001 (38155)
+[2026-04-09 20:51:39 -0700] [38155] [INFO] Using worker: sync
+[2026-04-09 20:51:39 -0700] [38156] [INFO] Booting worker with pid: 38156
+/Users/jasonscott/Documents/Mist-Hackathon-2026/venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(

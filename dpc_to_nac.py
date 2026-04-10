@@ -1018,6 +1018,110 @@ def api_upgrade_devices(org_id):
         return jsonify({"error": str(e)}), 500
 
 
+# ── Journey (main entry point) ────────────────────────────────────────────────
+
+@app.route("/journey/<org_id>")
+def journey(org_id):
+    if not valid_uuid(org_id):
+        return redirect(url_for("orgs"))
+    sid = get_authed_sid()
+    if not sid:
+        return redirect(url_for("login"))
+    if not org_allowed(org_id):
+        return redirect(url_for("orgs"))
+    return render_template("journey.html",
+                           org_id=org_id,
+                           user_name=_sessions[sid].get("user_name", ""))
+
+
+@app.route("/api/deploy_status/<org_id>")
+def api_deploy_status(org_id):
+    """Device counts and per-site rollout status for the Deploy phase."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    try:
+        # Fetch all org sites for names + complete site list
+        sites_raw, _ = mist_list(sid, f"/orgs/{org_id}/sites")
+        site_names   = {s["id"]: s.get("name", s["id"]) for s in sites_raw}
+
+        # Fetch device stats (all types, all statuses)
+        try:
+            raw = mist_get(sid, f"/orgs/{org_id}/stats/devices?status=all&limit=1000")
+            devices = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+        except Exception:
+            devices = []
+
+        # Aggregate by site and type
+        site_stats = {}
+        by_type    = {"ap": 0, "switch": 0, "gateway": 0}
+        total_online = 0
+
+        for d in devices:
+            site_id = d.get("site_id")
+            if not site_id:
+                continue
+            if site_id not in site_stats:
+                site_stats[site_id] = {"total": 0, "online": 0, "offline": 0,
+                                       "by_type": {"ap": 0, "switch": 0, "gateway": 0}}
+            connected = d.get("status") == "connected"
+            dtype     = d.get("type", "")
+            site_stats[site_id]["total"] += 1
+            if connected:
+                site_stats[site_id]["online"] += 1
+                total_online += 1
+            else:
+                site_stats[site_id]["offline"] += 1
+            if dtype in by_type:
+                by_type[dtype]                          += 1
+                site_stats[site_id]["by_type"][dtype]   += 1
+
+        # Build site list — include ALL sites, even those with no devices yet
+        sites_list = []
+        for site_id, name in site_names.items():
+            stats = site_stats.get(site_id, {"total": 0, "online": 0, "offline": 0,
+                                              "by_type": {"ap": 0, "switch": 0, "gateway": 0}})
+            if stats["total"] == 0:
+                status = "pending"
+            elif stats["offline"] == 0:
+                status = "online"
+            else:
+                status = "partial"
+            sites_list.append({
+                "id":      site_id,
+                "name":    name,
+                "total":   stats["total"],
+                "online":  stats["online"],
+                "offline": stats["offline"],
+                "by_type": stats["by_type"],
+                "status":  status,
+            })
+
+        # Sort: partial first, then online, then pending
+        order = {"partial": 0, "online": 1, "pending": 2}
+        sites_list.sort(key=lambda s: (order.get(s["status"], 9), s["name"]))
+
+        sites_online = sum(1 for s in sites_list if s["status"] in ("online", "partial"))
+
+        return jsonify({
+            "sites":        sites_list,
+            "sites_online": sites_online,
+            "sites_total":  len(site_names),
+            "totals": {
+                "devices":        len(devices),
+                "devices_online": total_online,
+                "by_type":        by_type,
+            },
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Network Health routes ─────────────────────────────────────────────────────
 
 @app.route("/health/<org_id>")
