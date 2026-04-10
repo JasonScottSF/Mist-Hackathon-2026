@@ -184,6 +184,38 @@
     .empty-state { padding: 28px 20px; text-align: center; color: var(--muted); font-size: 13px; }
 
     .last-updated { font-size: 12px; color: var(--muted); margin-bottom: 24px; }
+
+    /* ── Tool cards ── */
+    .tool-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 36px;
+    }
+    .tool-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px 22px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .tool-card-header {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .tool-card-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+      background: rgba(167,139,250,0.12);
+    }
+    .tool-card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .tool-card-desc  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .tool-card-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #7c3aed; color: #fff;
+      border: none; border-radius: 6px; padding: 7px 14px;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      text-decoration: none; align-self: flex-start; margin-top: 4px;
+    }
+    .tool-card-btn:hover { background: #6d28d9; }
   </style>
 </head>
 <body>
@@ -205,7 +237,6 @@
   <a class="tab"        data-tab-id="inventory"    href="/inventory/{{ org_id }}">&#128196; Device Inventory</a>
   <a class="tab"        data-tab-id="troubleshoot"  href="/troubleshoot/{{ org_id }}">&#129658; Troubleshooting</a>
   <a class="tab"        data-tab-id="bestpractices" href="/bestpractices/{{ org_id }}">&#9989; Best Practices</a>
-  <a class="tab"        data-tab-id="dpc"            href="/scan/{{ org_id }}">&#8644; DPC → NAC</a>
 </nav>
 
 <main>
@@ -220,6 +251,20 @@
   </div>
   <div id="error-banner"></div>
   <div id="content"></div>
+
+  <div class="tool-cards">
+    <div class="tool-card">
+      <div class="tool-card-header">
+        <div class="tool-card-icon">&#8644;</div>
+        <div class="tool-card-title">DPC → NAC Converter</div>
+      </div>
+      <div class="tool-card-desc">
+        Scan Dynamic Port Configuration rules and convert them to proper
+        NAC policies — usermacs, labels, and match rules ready to apply.
+      </div>
+      <a class="tool-card-btn" href="/scan/{{ org_id }}">Open Converter &#8594;</a>
+    </div>
+  </div>
 </main>
 
 <script>

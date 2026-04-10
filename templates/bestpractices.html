@@ -191,6 +191,15 @@
     .btn-apply-all:hover:not(:disabled) { background: #6d28d9; }
     .btn-apply-all:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    .bp-action-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 600; padding: 7px 16px;
+      background: var(--purple); color: #fff;
+      border-radius: 7px; text-decoration: none;
+      transition: background 0.15s;
+    }
+    .bp-action-btn:hover { background: #6d28d9; color: #fff; }
+
     /* ── WLAN table ── */
     .wlan-table-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -316,7 +325,6 @@
   <a class="tab"        data-tab-id="inventory"     href="/inventory/{{ org_id }}">&#128196; Device Inventory</a>
   <a class="tab"        data-tab-id="troubleshoot"  href="/troubleshoot/{{ org_id }}">&#129658; Troubleshooting</a>
   <a class="tab active" data-tab-id="bestpractices" href="/bestpractices/{{ org_id }}">&#9989; Best Practices</a>
-  <a class="tab"        data-tab-id="dpc"           href="/scan/{{ org_id }}">&#8644; DPC → NAC</a>
 </nav>
 
 <main>
@@ -1194,11 +1202,10 @@ function buildDpcSub(dpc) {
         ${dpc.template_count} template${dpc.template_count !== 1 ? "s" : ""}.
         Port profiles are auto-assigned based on connected device identity.
       </p>
-      ${chips ? `<div class="chip-row">${chips}</div>` : ""}
-      <div class="nac-note" style="margin-top:14px">
-        &#128274;&nbsp;<strong>Ready to harden?</strong>
-        Once your deployment is stable, use the <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
-        to migrate dynamic rules to proper NAC policies.
+      ${chips ? `<div class="chip-row" style="margin-bottom:14px">${chips}</div>` : ""}
+      <div class="nac-note" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <span>&#128274;&nbsp;<strong>Ready to harden?</strong> Migrate dynamic rules to proper NAC policies.</span>
+        <a class="bp-action-btn" href="/scan/{{ org_id }}" style="white-space:nowrap">&#8644; Open DPC → NAC Converter</a>
       </div>`;
   } else {
     bodyHtml = `
@@ -1213,10 +1220,9 @@ function buildDpcSub(dpc) {
         <p>Configure DPC rules in <strong style="color:var(--text)">Network Templates →
           Port Configuration → Dynamic</strong>.</p>
       </div>
-      <div class="nac-note">
-        &#128161;&nbsp;<strong>Deployment tip:</strong> Configure DPC rules for fast initial
-        rollout. Once stable, use the <a href="/scan/{{ org_id }}">DPC → NAC Converter</a>
-        to promote dynamic rules to proper NAC policies for production security.
+      <div class="nac-note" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:10px">
+        <span>&#128161;&nbsp;<strong>No DPC rules found.</strong> Configure rules first, then convert them to NAC.</span>
+        <a class="bp-action-btn" href="/scan/{{ org_id }}" style="white-space:nowrap">&#8644; Open DPC → NAC Converter</a>
       </div>`;
   }
   return makeSubCard("sub-dpc", "🔌", "Dynamic Port Configuration",
