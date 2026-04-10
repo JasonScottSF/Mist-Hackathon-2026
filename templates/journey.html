@@ -623,13 +623,12 @@ function calcPlanChecks() {
   });
   checks.push({
     id: "data-rates",
-    name: "Data rates — high density",
+    name: "Data rates",
     status: notHighDensity.length === 0 ? "green" : "yellow",
     detail: notHighDensity.length > 0
       ? `${notHighDensity.length} WLAN${notHighDensity.length!==1?"s":""} not on high density`
-      : "All active WLANs using high density",
-    actionLabel: notHighDensity.length > 0 ? "Fix →" : null,
-    actionUrl: `/bestpractices/${ORG_ID}`,
+      : "All active WLANs on high density",
+    actionLabel: null,
   });
 
   // Banned clients
