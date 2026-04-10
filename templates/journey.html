@@ -663,14 +663,18 @@ function calcPlanChecks() {
   // Licenses
   const expired  = licenses.expired  || 0;
   const expiring = licenses.expiring || 0;
+  const exceeded = licenses.exceeded || 0;
   const total    = licenses.total    || 0;
+  const licIssues = [];
+  if (expired  > 0) licIssues.push(`${expired} expired`);
+  if (exceeded > 0) licIssues.push(`${exceeded} exceeded`);
+  if (expiring > 0) licIssues.push(`${expiring} expiring soon`);
   checks.push({
     id: "licenses",
     name: "Subscriptions",
-    status: expired > 0 ? "red" : expiring > 0 ? "yellow" : total > 0 ? "green" : "info",
-    detail: expired  > 0 ? `${expired} expired subscription${expired!==1?"s":""}`
-          : expiring > 0 ? `${expiring} expiring within 90 days`
-          : total    > 0 ? "All licenses active"
+    status: (expired > 0 || exceeded > 0) ? "red" : expiring > 0 ? "yellow" : total > 0 ? "green" : "info",
+    detail: licIssues.length > 0 ? licIssues.join(" · ")
+          : total > 0 ? "All licenses active"
           : "No active subscriptions — API token access is not subscription-dependent",
     actionLabel: null,
   });
@@ -1077,15 +1081,22 @@ function openDrawer(id) {
     const subs = lic.subscriptions || [];
     function fmtDate(ts) { if (!ts) return "No expiry"; return new Date(ts*1000).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}); }
     const rows = subs.map(s => {
-      const clr = s.status === "expired" ? "red" : s.status === "expiring" ? "yellow" : "green";
+      const isExceeded = s.remaining_quantity != null && s.remaining_quantity <= 0 && s.status !== "expired";
+      const clr   = s.status === "expired" ? "red" : isExceeded ? "red" : s.status === "expiring" ? "yellow" : "green";
+      const label = s.status === "expired" ? "Expired" : isExceeded ? "Exceeded" : s.status === "expiring" ? "Expiring" : "Active";
+      const qty   = s.quantity != null ? `${s.quantity} seats` : "";
+      const rem   = s.remaining_quantity != null ? ` · ${s.remaining_quantity} remaining` : "";
       return `<div class="receipt-row">
-        <div class="receipt-row-name"><strong>${s.type||s.sku||"Subscription"}</strong>
-          <div class="receipt-row-sub">Expires: ${fmtDate(s.end_time)}</div></div>
-        <div class="receipt-row-val ${clr}">${s.status==="expired"?"Expired":s.status==="expiring"?"Expiring":"Active"}</div></div>`;
+        <div class="receipt-row-name"><strong>${s.type||"Subscription"}</strong>
+          <div class="receipt-row-sub">${qty}${rem} · Expires: ${fmtDate(s.end_time)}</div></div>
+        <div class="receipt-row-val ${clr}">${label}</div></div>`;
     }).join("");
-    openDrawerContent("Subscriptions", "Org license status",
-      `${rows || '<div class="empty-receipt">No subscription data.</div>'}
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/subscriptions</code></div>`,
+    const subtitle = subs.length === 0
+      ? "No subscriptions — API token access is not affected"
+      : `${subs.length} subscription${subs.length!==1?"s":""}`;
+    openDrawerContent("Subscriptions", subtitle,
+      `${rows || '<div class="empty-receipt">No subscriptions found — API token access is not subscription-dependent.</div>'}
+       <div class="source-line">&#128203; <code>GET /orgs/{id}/subscriptions</code> · <code>quantity</code>, <code>remaining_quantity</code>, <code>end_time</code></div>`,
       `<a class="drawer-btn-secondary" href="https://${state.health?.manage_host||'manage.mist.com'}" target="_blank">View in Mist ↗</a>`);
     return;
   }

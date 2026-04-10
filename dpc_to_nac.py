@@ -1884,11 +1884,16 @@ def api_bestpractices(org_id):
                 })
             processed.sort(key=lambda s: (s["status"] != "expired", s["status"] != "expiring", s["type"].lower()))
 
+            def _is_exceeded(s):
+                rq = s.get("remaining_quantity")
+                return rq is not None and rq <= 0 and s["status"] != "expired"
+
             licenses_info = {
                 "total":    len(processed),
                 "active":   sum(1 for s in processed if s["status"] == "active"),
                 "expiring": sum(1 for s in processed if s["status"] == "expiring"),
                 "expired":  sum(1 for s in processed if s["status"] == "expired"),
+                "exceeded": sum(1 for s in processed if _is_exceeded(s)),
                 "subscriptions": processed,
             }
 
