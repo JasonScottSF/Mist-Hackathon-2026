@@ -748,7 +748,7 @@ function renderPlan() {
         <div class="big-score ${scoreClr}" onclick="openDrawer('plan-score')">${passing}/${total}</div>
         <div class="readiness-label"><strong>${headline}</strong>${subtext}</div>
       </div>
-      ${!allGood ? `<a class="btn-primary" href="/bestpractices/${ORG_ID}">Fix in Best Practices →</a>` : ""}
+      ${!allGood ? `<button class="btn-primary" onclick="openDrawer('plan-score')">Review issues →</button>` : ""}
     </div>
     <div id="golden-section">${goldenSectionHtml()}</div>
     ${groupHtml("Wireless", "var(--blue)", wireless)}
@@ -974,7 +974,7 @@ function openDrawer(id) {
       </div>
       <div class="receipt-section">All checks</div>${rows}
       <div class="source-line">&#128203; Aggregated from <code>/api/bestpractices</code> + <code>/api/datarates</code></div>`,
-      passing < total ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix issues →</a>` : "");
+      "");
     return;
   }
 
@@ -992,7 +992,7 @@ function openDrawer(id) {
       `${tmplRows ? `<div class="receipt-section">Template WLANs</div>${tmplRows}` : ""}
        ${siteRows ? `<div class="receipt-section">Site-only WLANs (not in a template)</div>${siteRows}` : ""}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/wlantemplates</code> + <code>GET /orgs/{id}/wlans</code></div>`,
-      site.length > 0 ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Convert to templates →</a>` : "");
+      "");
     return;
   }
 
@@ -1047,30 +1047,36 @@ function openDrawer(id) {
 
     function wlanRow(w, scope) {
       const disabled = w.enabled === false;
+      const canFix   = !disabled && scope === "tmpl" && worstRate(w) !== "high-density";
       const nameStyle = disabled ? "color:var(--red)" : "";
       const disabledTag = disabled
         ? ` <span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25);vertical-align:middle">Disabled</span>`
         : "";
       const context = scope === "site" ? w.site_name || "Site WLAN" : w.template_name || "Template";
       const sub = `${context} · ${bandSummary(w)}`;
-      return `<div class="receipt-row">
-        <div class="receipt-row-name">
+      const fixBtn = canFix
+        ? `<button id="dr-fix-${w.id}" class="gonogo-fix" onclick="setHighDensity('${w.id}','${w.scope||'org'}','${w.scope_id||ORG_ID}')">Set High Density</button>`
+        : "";
+      return `<div class="receipt-row" style="align-items:center">
+        <div class="receipt-row-name" style="flex:1">
           <strong style="${nameStyle}">${w.ssid}</strong>${disabledTag}
           <div class="receipt-row-sub">${sub}</div>
         </div>
-        <div class="receipt-row-val ${rateClr(w)}">${rateLabel(w)}</div></div>`;
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div class="receipt-row-val ${rateClr(w)}">${rateLabel(w)}</div>
+          ${fixBtn}
+        </div></div>`;
     }
 
     const tmplRows  = tmplWlans.map(w => wlanRow(w, "tmpl")).join("");
     const siteRows2 = siteWlans.map(w => wlanRow(w, "site")).join("");
-    const needsFix  = drWlans.some(w => w.enabled !== false && worstRate(w) !== "high-density");
 
     openDrawerContent("Data Rates", "high-density disables legacy 802.11b/g rates, improving airtime efficiency",
       `${tmplRows   ? `<div class="receipt-section">Template WLANs</div>${tmplRows}` : ""}
-       ${siteRows2  ? `<div class="receipt-section">Site-only WLANs</div>${siteRows2}` : ""}
+       ${siteRows2  ? `<div class="receipt-section">Site-only WLANs (read-only)</div>${siteRows2}` : ""}
        ${!tmplRows && !siteRows2 ? '<div class="empty-receipt">No WLAN data found.</div>' : ""}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/wlans/{id}</code> · <code>rateset[band][template]</code></div>`,
-      needsFix ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix data rates →</a>` : "");
+      "");
     return;
   }
 
@@ -1082,11 +1088,17 @@ function openDrawer(id) {
       const box = on
         ? `<div class="gonogo-checkbox go"  style="display:inline-flex;width:16px;height:16px;border-radius:3px;font-size:10px;align-items:center;justify-content:center;border:1.5px solid rgba(34,197,94,0.4);background:rgba(34,197,94,0.15);color:var(--green);flex-shrink:0">✓</div>`
         : `<div class="gonogo-checkbox nogo" style="display:inline-flex;width:16px;height:16px;border-radius:3px;font-size:10px;align-items:center;justify-content:center;border:1.5px solid rgba(239,68,68,0.35);background:rgba(239,68,68,0.12);color:var(--red);flex-shrink:0">✕</div>`;
+      const fixBtn = !on
+        ? `<button id="bc-fix-${w.id}" class="gonogo-fix" onclick="enableBannedClients('${w.id}','${w.scope||'org'}','${w.scope_id||ORG_ID}')">Enable</button>`
+        : "";
       return `<div class="receipt-row" style="align-items:center;gap:10px">
         ${box}
         <div class="receipt-row-name" style="flex:1"><strong>${w.ssid}</strong>
           <div class="receipt-row-sub">${w.template_name||"Template"}</div></div>
-        <div class="receipt-row-val ${on ? "green" : "red"}">${on ? "Enabled" : "Not set"}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div class="receipt-row-val ${on ? "green" : "red"}">${on ? "Enabled" : "Not set"}</div>
+          ${fixBtn}
+        </div>
       </div>`;
     }).join("");
     const missing = tmpl.filter(w => !w.block_blacklist_clients).length;
@@ -1094,7 +1106,7 @@ function openDrawer(id) {
       missing === 0 ? `All ${tmpl.length} WLANs protected` : `${missing} of ${tmpl.length} WLANs missing protection`,
       `${rows || '<div class="empty-receipt">No template WLANs found.</div>'}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/wlantemplates/{id}/wlans</code> · <code>block_blacklist_clients</code></div>`,
-      missing > 0 ? `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix →</a>` : "");
+      "");
     return;
   }
 
@@ -1113,21 +1125,12 @@ function openDrawer(id) {
       `<div class="receipt-section">Network templates</div>
        ${rows || '<div class="empty-receipt">No network templates found.</div>'}
        <div class="source-line">&#128203; <code>GET /orgs/{id}/networktemplates/{id}</code> · <code>dns_servers</code>, <code>ntp_servers</code></div>`,
-      `<a class="drawer-btn-primary" href="/bestpractices/${ORG_ID}">Fix in Best Practices →</a>
-       <a class="drawer-btn-secondary" href="https://${state.health?.manage_host||'manage.mist.com'}" target="_blank">Open Mist ↗</a>`);
+      `<a class="drawer-btn-secondary" href="https://${state.health?.manage_host||'manage.mist.com'}" target="_blank">Configure in Mist ↗</a>`);
     return;
   }
 
   if (id === "dpc-plan") {
-    const dpc   = b.dpc || {};
-    const tmpls = dpc.templates || [];
-    const rows  = tmpls.map(t => `<div class="receipt-row">
-      <div class="receipt-row-name">${t.name}</div>
-      <div class="receipt-row-val green">${t.rule_count} rule${t.rule_count!==1?"s":""}</div></div>`).join("");
-    openDrawerContent("Dynamic Port Configuration", `${dpc.rule_count||0} rules across ${dpc.template_count||0} templates`,
-      `${rows ? `<div class="receipt-section">Templates with DPC rules</div>${rows}` : '<div class="empty-receipt">No DPC rules configured.</div>'}
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/networktemplates/{id}</code> · <code>port_usages.dynamic.rules</code></div>`,
-      dpc.has_rules ? `<a class="drawer-btn-primary" href="/scan/${ORG_ID}">Convert to NAC →</a>` : "");
+    _renderDpcDrawer();
     return;
   }
 
@@ -1156,6 +1159,213 @@ function openDrawer(id) {
     return;
   }
 
+}
+
+// ── Inline fix actions ────────────────────────────────────────────────────────
+
+async function setHighDensity(wlanId, scope, scopeId) {
+  const btn = document.getElementById(`dr-fix-${wlanId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Applying…"; }
+  try {
+    const res = await fetch(`/api/datarates/${ORG_ID}/${wlanId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope, scope_id: scopeId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    // Update local state
+    const w = (state.dr?.wlans || []).find(w => w.id === wlanId);
+    if (w) { w.band_24 = "high-density"; w.band_5 = "high-density"; w.band_6 = "high-density"; w.high_density = true; }
+    openDrawer("data-rates");   // re-render drawer
+    renderPlan();               // refresh check row
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
+    alert(`Failed: ${e.message}`);
+  }
+}
+
+async function enableBannedClients(wlanId, scope, scopeId) {
+  const btn = document.getElementById(`bc-fix-${wlanId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Enabling…"; }
+  try {
+    const res = await fetch(`/api/bestpractices/${ORG_ID}/${wlanId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field: "block_blacklist_clients", scope, scope_id: scopeId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    // Update local state
+    const w = (state.bp?.wlans || []).find(w => w.id === wlanId);
+    if (w) w.block_blacklist_clients = true;
+    openDrawer("banned-clients"); // re-render drawer
+    renderPlan();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
+    alert(`Failed: ${e.message}`);
+  }
+}
+
+// ── DPC → NAC multi-step conversion ──────────────────────────────────────────
+
+const _dpc = { phase: "idle", scan: null, result: null };
+// phases: idle → scanning → preview → applying → done | error
+
+function _renderDpcDrawer() {
+  const dpc  = (state.bp || {}).dpc || {};
+  const { phase, scan, result } = _dpc;
+
+  const title = "DPC → NAC Conversion";
+
+  if (phase === "idle") {
+    const tmplRows = (dpc.templates || []).map(t => `
+      <div class="receipt-row">
+        <div class="receipt-row-name">${t.name}</div>
+        <div class="receipt-row-val green">${t.rule_count} rule${t.rule_count!==1?"s":""}</div>
+      </div>`).join("");
+    const body = dpc.has_rules
+      ? `<div class="receipt-score">
+           <div class="receipt-big green">${dpc.rule_count||0}</div>
+           <div class="receipt-label"><strong>DPC rules found</strong>Ready to convert to NAC policies.</div>
+         </div>
+         <div class="receipt-section">Network templates</div>
+         ${tmplRows}
+         <div class="source-line">&#128203; <code>GET /orgs/{id}/networktemplates/{id}</code> · <code>port_usages.dynamic.rules</code></div>`
+      : `<div class="empty-receipt">No DPC rules configured in this org.</div>`;
+    const footer = dpc.has_rules
+      ? `<button class="drawer-btn-primary" onclick="dpcScan()">Scan &amp; Preview →</button>`
+      : "";
+    openDrawerContent(title, `${dpc.rule_count||0} rules across ${dpc.template_count||0} templates`, body, footer);
+    return;
+  }
+
+  if (phase === "scanning") {
+    openDrawerContent(title, "Scanning network templates…",
+      `<div class="phase-loading" style="padding:40px 0"><div class="spinner"></div>Scanning DPC rules…</div>`, "");
+    return;
+  }
+
+  if (phase === "preview") {
+    const tags      = scan.proposed_tags      || [];
+    const rules     = scan.proposed_rules     || [];
+    const endpoints = scan.proposed_endpoints || [];
+    const sources   = scan.sources            || [];
+
+    const srcRows = sources.map(s => `
+      <div class="receipt-row">
+        <div class="receipt-row-name">${s.template_name}
+          <div class="receipt-row-sub">${s.rules.length} rule${s.rules.length!==1?"s":""}</div>
+        </div>
+        <div class="receipt-row-val green">Ready</div>
+      </div>`).join("");
+
+    const body = `
+      <div class="receipt-score">
+        <div class="receipt-big" style="color:var(--purple-lt)">${tags.length + rules.length + endpoints.length}</div>
+        <div class="receipt-label"><strong>Objects to create</strong>
+          ${tags.length} tags · ${rules.length} rules · ${endpoints.length} endpoints</div>
+      </div>
+      <div class="receipt-section">Source templates</div>
+      ${srcRows || '<div class="empty-receipt">No sources.</div>'}
+      <div class="receipt-section">Will create</div>
+      <div class="receipt-row"><div class="receipt-row-name">NAC Tags</div><div class="receipt-row-val">${tags.length}</div></div>
+      <div class="receipt-row"><div class="receipt-row-name">NAC Rules</div><div class="receipt-row-val">${rules.length}</div></div>
+      <div class="receipt-row"><div class="receipt-row-name">Endpoints (usermacs)</div><div class="receipt-row-val">${endpoints.length}</div></div>
+      <div class="source-line">&#128203; <code>GET /api/scan/${ORG_ID}</code></div>`;
+    const footer = `
+      <button class="drawer-btn-primary" onclick="dpcApply()">Apply to Mist →</button>
+      <button class="drawer-btn-secondary" onclick="_dpc.phase='idle';_renderDpcDrawer()">Back</button>`;
+    openDrawerContent(title, "Review before applying", body, footer);
+    return;
+  }
+
+  if (phase === "applying") {
+    openDrawerContent(title, "Creating NAC objects in Mist…",
+      `<div class="phase-loading" style="padding:40px 0"><div class="spinner"></div>Creating tags, rules, and endpoints…</div>`, "");
+    return;
+  }
+
+  if (phase === "done") {
+    const r = result || {};
+    function resultRows(label, items) {
+      if (!items || !items.length) return "";
+      const rows = items.map(item => {
+        const clr = item.status === "created" ? "green" : item.status === "exists" ? "muted" : "red";
+        return `<div class="receipt-row">
+          <div class="receipt-row-name">${item.name||item.mac||"—"}</div>
+          <div class="receipt-row-val ${clr}">${item.status}</div></div>`;
+      }).join("");
+      return `<div class="receipt-section">${label}</div>${rows}`;
+    }
+    const errors = (r.errors || []).map(e =>
+      `<div style="font-size:12px;color:var(--red);padding:4px 0">${e}</div>`).join("");
+    const created = [...(r.tags||[]),...(r.rules||[]),...(r.endpoints||[])].filter(i=>i.status==="created").length;
+    const body = `
+      <div class="receipt-score">
+        <div class="receipt-big ${errors.length?'yellow':'green'}">${created}</div>
+        <div class="receipt-label"><strong>${errors.length ? "Done with warnings" : "Applied successfully"}</strong>
+          ${created} object${created!==1?"s":""} created in Mist.</div>
+      </div>
+      ${resultRows("Tags",      r.tags)}
+      ${resultRows("Rules",     r.rules)}
+      ${resultRows("Endpoints", r.endpoints)}
+      ${errors ? `<div class="receipt-section">Errors</div>${errors}` : ""}
+      <div class="source-line">&#128203; <code>POST /api/apply/${ORG_ID}</code></div>`;
+    openDrawerContent(title, "Conversion complete", body, "");
+    return;
+  }
+
+  if (phase === "error") {
+    openDrawerContent(title, "Conversion failed",
+      `<div class="phase-error">${_dpc.errorMsg || "Unknown error"}</div>`,
+      `<button class="drawer-btn-secondary" onclick="_dpc.phase='idle';_renderDpcDrawer()">Try again</button>`);
+    return;
+  }
+}
+
+async function dpcScan() {
+  _dpc.phase = "scanning";
+  _renderDpcDrawer();
+  try {
+    const res  = await fetch(`/api/scan/${ORG_ID}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    _dpc.scan  = data;
+    _dpc.phase = "preview";
+  } catch(e) {
+    _dpc.phase    = "error";
+    _dpc.errorMsg = e.message;
+  }
+  _renderDpcDrawer();
+}
+
+async function dpcApply() {
+  _dpc.phase = "applying";
+  _renderDpcDrawer();
+  try {
+    const scan = _dpc.scan;
+    const res  = await fetch(`/api/apply/${ORG_ID}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tags:      scan.proposed_tags      || [],
+        rules:     scan.proposed_rules     || [],
+        endpoints: scan.proposed_endpoints || [],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    _dpc.result = data;
+    _dpc.phase  = "done";
+    // Mark deploy check updated
+    state.deploy = null;
+    renderDeploy();
+  } catch(e) {
+    _dpc.phase    = "error";
+    _dpc.errorMsg = e.message;
+  }
+  _renderDpcDrawer();
 }
 
 // ── Operate drawers ───────────────────────────────────────────────────────────
