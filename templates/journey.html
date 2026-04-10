@@ -1096,7 +1096,7 @@ function openDrawer(id) {
       : `${subs.length} subscription${subs.length!==1?"s":""}`;
     openDrawerContent("Subscriptions", subtitle,
       `${rows || '<div class="empty-receipt">No subscriptions found — API token access is not subscription-dependent.</div>'}
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/subscriptions</code> · <code>quantity</code>, <code>remaining_quantity</code>, <code>end_time</code></div>`,
+       <div class="source-line">&#128203; <code>GET /orgs/{id}/subscriptions</code></div>`,
       `<a class="drawer-btn-secondary" href="https://${state.health?.manage_host||'manage.mist.com'}" target="_blank">View in Mist ↗</a>`);
     return;
   }
