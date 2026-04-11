@@ -1055,7 +1055,7 @@ def api_deploy_status(org_id):
             f_sites    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/sites")
             f_devices  = pool.submit(_fetch, mist_get,  sid,
                                      f"/orgs/{org_id}/stats/devices?status=all&limit=1000")
-            f_tmpls    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/wlantemplates")
+            f_tmpls    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/templates")
             f_dpc      = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/networktemplates")
             f_wlans    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/wlans")
 
@@ -2455,15 +2455,34 @@ def api_create_rf_template(org_id):
 # HPE Networking recommended defaults.  These are opinionated starting points;
 # the operator is expected to assign them to sites and customise as needed.
 #
-_GOLDEN_NAME_WLAN    = "HPE Golden — WLAN"
+_GOLDEN_NAME_WLAN    = "HPE Best Practices"
 _GOLDEN_NAME_NETWORK = "HPE Golden — Network"
 _GOLDEN_NAME_RF      = "HPE Golden — RF"
 
 _GOLDEN_WLAN_TEMPLATE = {
     "name": _GOLDEN_NAME_WLAN,
-    # Template container only; WLANs are added by the operator.
-    # Rateset best-practice: high-density on all bands.
-    # block_blacklist_clients will be enforced on each WLAN added here.
+}
+
+# Best-practice WLAN created inside the golden template.
+# SSID and PSK are placeholders — update before enabling.
+_GOLDEN_WLAN_BODY = {
+    "ssid":                    "HPE-Golden-SSID",
+    "enabled":                 False,
+    "auth": {
+        "type":     "psk",
+        "psk":      "ChangeMe123!",
+        "pairwise": ["wpa2-ccmp", "wpa3"],
+    },
+    "block_blacklist_clients": True,
+    "arp_filter":              True,
+    "limit_bcast":             True,
+    "limit_probe_response":    True,
+    "no_legacy":               True,
+    "rateset": {
+        "24": {"template": "high-density"},
+        "5":  {"template": "high-density"},
+        "6":  {"template": "high-density"},
+    },
 }
 
 _GOLDEN_NETWORK_TEMPLATE = {
@@ -2532,7 +2551,7 @@ def api_golden_status(org_id):
                 return []
 
         with ThreadPoolExecutor(max_workers=3) as pool:
-            f_wlan = pool.submit(_safe_list, f"/orgs/{org_id}/wlantemplates")
+            f_wlan = pool.submit(_safe_list, f"/orgs/{org_id}/templates")
             f_net  = pool.submit(_safe_list, f"/orgs/{org_id}/networktemplates")
             f_rf   = pool.submit(_safe_list, f"/orgs/{org_id}/rftemplates")
 
@@ -2574,7 +2593,7 @@ def api_create_golden(org_id, tmpl_type):
         return jsonify({"error": "Access denied"}), 403
 
     if tmpl_type == "wlan":
-        api_path    = f"/orgs/{org_id}/wlantemplates"
+        api_path    = f"/orgs/{org_id}/templates"
         golden_body = _GOLDEN_WLAN_TEMPLATE
         golden_name = _GOLDEN_NAME_WLAN
     elif tmpl_type == "network":
@@ -2587,9 +2606,12 @@ def api_create_golden(org_id, tmpl_type):
         golden_name = _GOLDEN_NAME_RF
 
     try:
-        # Idempotent: check if it already exists
-        raw  = mist_get(sid, api_path)
-        lst  = raw if isinstance(raw, list) else raw.get("results", [])
+        # Idempotent: check if it already exists (tolerate 404 — org may have no templates yet)
+        try:
+            raw = mist_get(sid, api_path)
+            lst = raw if isinstance(raw, list) else raw.get("results", [])
+        except Exception:
+            lst = []
         existing = _find_golden(lst, golden_name)
         if existing is None and tmpl_type == "rf":
             existing = _find_golden(lst, "Suggested Baseline Settings")
@@ -2601,14 +2623,31 @@ def api_create_golden(org_id, tmpl_type):
                   tmpl_type, org_id, actor, request.remote_addr)
 
         r = mist_post(sid, api_path, golden_body)
-        if r.ok:
-            created = r.json()
-            return jsonify({"id": created.get("id"), "name": created.get("name"), "created": True})
-        try:
-            detail = r.json().get("detail", r.text[:300])
-        except Exception:
-            detail = r.text[:300]
-        return jsonify({"error": detail}), r.status_code
+        if not r.ok:
+            try:
+                detail = r.json().get("detail", r.text[:200])
+            except Exception:
+                detail = f"Mist API error {r.status_code}"
+            return jsonify({"error": detail}), r.status_code
+
+        created  = r.json()
+        tmpl_id  = created.get("id")
+        tmpl_name = created.get("name")
+
+        # For WLAN templates: also create the best-practice WLAN inside the template
+        wlan_warning = None
+        if tmpl_type == "wlan" and tmpl_id:
+            wlan_body = dict(_GOLDEN_WLAN_BODY)
+            wlan_body["template_id"] = tmpl_id
+            wr = mist_post(sid, f"/orgs/{org_id}/wlans", wlan_body)
+            if not wr.ok:
+                wlan_warning = f"Template created but WLAN creation failed: {wr.text[:200]}"
+                _log.warning("GOLDEN_WLAN_CREATE failed: %s", wr.text[:200])
+
+        resp = {"id": tmpl_id, "name": tmpl_name, "created": True}
+        if wlan_warning:
+            resp["warning"] = wlan_warning
+        return jsonify(resp)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

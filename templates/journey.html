@@ -221,6 +221,7 @@
     .golden-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
     @media (max-width: 680px) { .golden-grid { grid-template-columns: 1fr; } }
     .golden-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0; display: flex; flex-direction: column; overflow: hidden; transition: border-color 0.15s; }
+    .golden-error { font-size: 11px; color: var(--red); padding: 6px 16px 10px; }
     .golden-card:hover { border-color: rgba(167,139,250,0.4); }
     .golden-card-top { padding: 16px 16px 12px; flex: 1; }
     .golden-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -449,7 +450,7 @@ const GOLDEN_DEFS = [
     key: "wlan",
     icon: "📡",
     title: "WLAN Template",
-    apiType: "wlantemplates",
+    apiType: "templates",
     settings: [
       "High-density data rates (disable legacy 802.11b/g)",
       "Banned client protection enabled",
@@ -560,9 +561,14 @@ async function createGoldenTemplate(key) {
     const sec = document.getElementById("golden-section");
     if (sec) sec.innerHTML = goldenSectionHtml();
   } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Create Best Practice Template"; }
     console.error("createGoldenTemplate:", e);
-    alert(`Failed to create template: ${e.message}`);
+    const card = document.getElementById(`golden-card-${key}`);
+    if (card) {
+      let errEl = card.querySelector(".golden-error");
+      if (!errEl) { errEl = document.createElement("div"); errEl.className = "golden-error"; card.appendChild(errEl); }
+      errEl.textContent = e.message;
+    }
   }
 }
 
@@ -572,7 +578,7 @@ function openGoldenDrawer(key) {
   const settingRows = def.settings.map(s =>
     `<div class="receipt-row"><div class="receipt-row-name">${s}</div><div class="receipt-row-val green">Applied</div></div>`
   ).join("");
-  const apiEndpoint = key === "wlan" ? "wlantemplates"
+  const apiEndpoint = key === "wlan" ? "templates"
                     : key === "network" ? "networktemplates"
                     : "rftemplates";
   openDrawerContent(
@@ -1023,7 +1029,7 @@ function openDrawer(id) {
       `${tmplRows ? `<div class="receipt-section">Template WLANs</div>${tmplRows}` : ""}
        ${siteRows ? `<div class="receipt-section">Site-only WLANs</div>${siteRows}` : ""}
        ${!tmplRows && !siteRows ? '<div class="empty-receipt">No WLANs found.</div>' : ""}
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/wlantemplates</code> + <code>GET /orgs/{id}/wlans</code></div>`,
+       <div class="source-line">&#128203; <code>GET /orgs/{id}/templates</code> + <code>GET /orgs/{id}/wlans</code></div>`,
       "");
     return;
   }
@@ -1142,7 +1148,7 @@ function openDrawer(id) {
     openDrawerContent("Banned Client Protection",
       missing === 0 ? `All ${tmpl.length} WLANs protected` : `${missing} of ${tmpl.length} WLANs missing protection`,
       `${rows || '<div class="empty-receipt">No template WLANs found.</div>'}
-       <div class="source-line">&#128203; <code>GET /orgs/{id}/wlantemplates/{id}/wlans</code> · <code>block_blacklist_clients</code></div>`,
+       <div class="source-line">&#128203; <code>GET /orgs/{id}/templates/{id}/wlans</code> · <code>block_blacklist_clients</code></div>`,
       "");
     return;
   }
