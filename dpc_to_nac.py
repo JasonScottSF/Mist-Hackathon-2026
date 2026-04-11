@@ -1789,7 +1789,9 @@ def api_bestpractices(org_id):
                                "has_ntp":     t["has_ntp"],
                                "ntp_servers": t["ntp_servers"],
                                "has_dns":     t["has_dns"],
-                               "dns_servers": t["dns_servers"]}
+                               "dns_servers": t["dns_servers"],
+                               "has_dpc":     t["has_dpc"],
+                               "dpc_rules":   t["dpc_rules"]}
                               for t in tmpl_details],
             }
         except Exception as e:
@@ -2221,6 +2223,307 @@ def api_datarates_apply(org_id, wlan_id):
             detail = r.text[:300]
         return jsonify({"status": "error", "detail": detail}), r.status_code
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── DPC Discovery endpoints ────────────────────────────────────────────────────
+
+_DPC_SKIP_PROFILES = {"dynamic", "default", "disabled", "dot1x", ""}
+
+# Mist system-defined switch port profiles — always available on every template
+# but never returned in port_usages by the API
+_MIST_SYSTEM_PROFILES = ["ap", "default", "disabled", "dot1x", "iot", "uplink"]
+
+
+def _all_org_port_profiles(sid, org_id):
+    """Return sorted list of every port profile available across the org.
+
+    Includes Mist system-defined profiles (always present but not in API responses)
+    plus any custom profiles defined in any org network template.
+    """
+    try:
+        tmpl_list = mist_get(sid, f"/orgs/{org_id}/networktemplates")
+        if not isinstance(tmpl_list, list):
+            tmpl_list = []
+        tmpl_ids = [t["id"] for t in tmpl_list if t.get("id")]
+
+        def _fetch(tid):
+            try:
+                detail = mist_get(sid, f"/orgs/{org_id}/networktemplates/{tid}")
+                return {k for k in detail.get("port_usages", {}) if k and k != "dynamic"}
+            except Exception:
+                return set()
+
+        profiles: set[str] = set(_MIST_SYSTEM_PROFILES)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for result in pool.map(_fetch, tmpl_ids):
+                profiles.update(result)
+        return sorted(profiles)
+    except Exception:
+        return list(_MIST_SYSTEM_PROFILES)
+
+
+def _common_prefix(strings):
+    """Longest common prefix across all strings."""
+    if not strings:
+        return ""
+    prefix = strings[0]
+    for s in strings[1:]:
+        while not s.startswith(prefix):
+            prefix = prefix[:-1]
+        if not prefix:
+            break
+    return prefix
+
+
+def _normalize_oui(mac_str):
+    """Return first 3 octets of a MAC as 'XX:XX:XX' uppercase, or None."""
+    clean = mac_str.lower().replace(":", "").replace("-", "").replace(".", "")
+    if len(clean) < 6:
+        return None
+    return ":".join(clean[i:i+2] for i in range(0, 6, 2)).upper()
+
+
+@app.route("/api/dpc_discover/<org_id>/<tmpl_id>")
+def api_dpc_discover(org_id, tmpl_id):
+    """Scan all org clients + port LLDP data to suggest DPC rules.
+
+    Groups devices by natural patterns (OUI, LLDP prefix) regardless of their
+    current port profile — the user then maps each group to a template profile.
+    """
+    if not valid_uuid(org_id) or not valid_uuid(tmpl_id):
+        return jsonify({"error": "Invalid ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+    try:
+        # Fast path: caller only needs the profile list (no device scan)
+        if request.args.get("profiles_only"):
+            tmpl = mist_get(sid, f"/orgs/{org_id}/networktemplates/{tmpl_id}")
+            custom = {k for k in tmpl.get("port_usages", {}) if k and k != "dynamic"}
+            tmpl_profiles = sorted(custom | set(_MIST_SYSTEM_PROFILES))
+            return jsonify({
+                "profiles":      _all_org_port_profiles(sid, org_id),
+                "tmpl_profiles": tmpl_profiles,
+            })
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            f_wired    = pool.submit(mist_get, sid,
+                f"/orgs/{org_id}/wired_clients/search?limit=1000&duration=7d")
+            f_wireless = pool.submit(mist_get, sid,
+                f"/orgs/{org_id}/clients/search?limit=1000&duration=7d")
+            f_ports    = pool.submit(mist_get, sid,
+                f"/orgs/{org_id}/stats/ports/search?limit=1000")
+            f_tmpl     = pool.submit(mist_get, sid,
+                f"/orgs/{org_id}/networktemplates/{tmpl_id}")
+
+        wired_raw    = f_wired.result()
+        wireless_raw = f_wireless.result()
+        ports_raw    = f_ports.result()
+        tmpl         = f_tmpl.result()
+
+        wired    = wired_raw.get("results",    []) if isinstance(wired_raw,    dict) else []
+        wireless = wireless_raw.get("results", []) if isinstance(wireless_raw, dict) else []
+        ports    = ports_raw.get("results",    []) if isinstance(ports_raw,    dict) else []
+
+        # Build LLDP name lookup: neighbour_mac (normalised) → system_name
+        lldp_by_mac: dict[str, str] = {}
+        for p in ports:
+            n_mac = _normalize_field(p.get("neighbor_mac")).lower().replace(":", "").strip()
+            lldp  = _normalize_field(p.get("neighbor_system_name")).strip()
+            if n_mac and lldp:
+                lldp_by_mac[n_mac] = lldp
+
+        # Build unified device catalogue: mac → {mac, make, lldp_name}
+        devices: dict[str, dict] = {}
+        for c in wired + wireless:
+            mac  = _normalize_field(c.get("mac")).lower().replace(":", "").strip()
+            if not mac or mac in devices:
+                continue
+            lldp = lldp_by_mac.get(mac, "")
+            devices[mac] = {
+                "mac":  mac,
+                "make": _normalize_field(c.get("manufacture")).strip(),
+                "lldp": lldp,
+            }
+
+        all_devs = list(devices.values())
+
+        # ── Group 1: LLDP system name prefix ─────────────────────────────────
+        lldp_pairs = [(d["mac"], d["lldp"]) for d in all_devs if d["lldp"]]
+        lldp_groups = []
+        assigned_lldp: set[str] = set()
+
+        if lldp_pairs:
+            # Count how many devices share each candidate prefix (len 2-20)
+            from collections import Counter
+            prefix_count: Counter = Counter()
+            for _, name in lldp_pairs:
+                for length in range(2, min(len(name) + 1, 21)):
+                    prefix_count[name[:length]] += 1
+
+            # Greedily pick prefixes: most devices first, longest prefix to break ties
+            for prefix, cnt in sorted(prefix_count.items(),
+                                      key=lambda x: (-x[1], -len(x[0]))):
+                if cnt < 2:
+                    continue
+                unassigned = [(mac, nm) for mac, nm in lldp_pairs
+                              if nm.startswith(prefix) and mac not in assigned_lldp]
+                if len(unassigned) < 2:
+                    continue
+                assigned_lldp.update(mac for mac, _ in unassigned)
+                makes = list({devices[mac]["make"] for mac, _ in unassigned
+                              if devices[mac]["make"]})
+                lldp_groups.append({
+                    "id":       f"lldp_{prefix}",
+                    "src":      "lldp_system_name",
+                    "value":    prefix,
+                    "count":    len(unassigned),
+                    "examples": [nm for _, nm in unassigned[:3]],
+                    "makes":    makes[:2],
+                })
+
+        # ── Group 2: MAC OUI ──────────────────────────────────────────────────
+        oui_buckets: dict[str, list] = {}
+        for d in all_devs:
+            oui = _normalize_oui(d["mac"])
+            if oui:
+                oui_buckets.setdefault(oui, []).append(d)
+
+        oui_groups = []
+        for oui, devs in sorted(oui_buckets.items(), key=lambda x: -len(x[1])):
+            if len(devs) < 2:
+                continue
+            makes = list({d["make"] for d in devs if d["make"]})
+            lldp_examples = [d["lldp"] for d in devs if d["lldp"]][:3]
+            oui_groups.append({
+                "id":            f"oui_{oui}",
+                "src":           "link_peermac",
+                "value":         oui,
+                "count":         len(devs),
+                "examples":      [mac_to_colon(d["mac"]) for d in devs[:3]],
+                "lldp_examples": lldp_examples,
+                "makes":         makes[:2],
+            })
+
+        org_profiles  = _all_org_port_profiles(sid, org_id)
+        custom_tmpl   = {k for k in tmpl.get("port_usages", {}) if k and k != "dynamic"}
+        tmpl_profiles = sorted(custom_tmpl | set(_MIST_SYSTEM_PROFILES))
+        existing_rules = tmpl.get("port_usages", {}).get("dynamic", {}).get("rules", [])
+
+        return jsonify({
+            "lldp_groups":     lldp_groups,
+            "oui_groups":      oui_groups,
+            "profiles":        org_profiles,
+            "tmpl_profiles":   tmpl_profiles,
+            "existing_rules":  existing_rules,
+            "devices_scanned": len(all_devs),
+            "ports_scanned":   len(ports),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/template_profile/<org_id>/<tmpl_id>/<profile_name>", methods=["DELETE"])
+def api_delete_template_profile(org_id, tmpl_id, profile_name):
+    """Remove a port profile from a network template's port_usages."""
+    if not valid_uuid(org_id) or not valid_uuid(tmpl_id):
+        return jsonify({"error": "Invalid ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+    if not profile_name or profile_name == "dynamic":
+        return jsonify({"error": "Cannot delete this profile"}), 400
+    try:
+        tmpl   = mist_get(sid, f"/orgs/{org_id}/networktemplates/{tmpl_id}")
+        usages = tmpl.get("port_usages", {})
+        if profile_name not in usages:
+            return jsonify({"error": "Profile not found"}), 404
+        del usages[profile_name]
+        tmpl["port_usages"] = usages
+        r = mist_put(sid, f"/orgs/{org_id}/networktemplates/{tmpl_id}", tmpl)
+        if r.ok:
+            remaining = sorted(k for k in usages if k and k != "dynamic")
+            return jsonify({"ok": True, "profiles": remaining})
+        return jsonify({"error": r.text[:200]}), r.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dpc_rules_batch/<org_id>/<tmpl_id>", methods=["POST"])
+def api_dpc_rules_batch(org_id, tmpl_id):
+    """Append a batch of DPC rules to a network template in a single PUT."""
+    if not valid_uuid(org_id) or not valid_uuid(tmpl_id):
+        return jsonify({"error": "Invalid ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+    data       = request.json or {}
+    rules_body = data.get("rules", [])
+    if not rules_body:
+        return jsonify({"error": "No rules provided"}), 400
+    try:
+        tmpl   = mist_get(sid, f"/orgs/{org_id}/networktemplates/{tmpl_id}")
+        usages = tmpl.setdefault("port_usages", {})
+        dyn    = usages.setdefault("dynamic", {"rules": []})
+        rules  = dyn.setdefault("rules", [])
+
+        # Identify which profiles are missing so we can source them from other templates
+        needed = {(r.get("usage") or "").strip() for r in rules_body} - set(usages)
+        if needed:
+            all_tmpls = mist_get(sid, f"/orgs/{org_id}/networktemplates")
+            if not isinstance(all_tmpls, list):
+                all_tmpls = []
+            for other_summary in all_tmpls:
+                if not needed:
+                    break
+                if other_summary.get("id") == tmpl_id:
+                    continue
+                try:
+                    other = mist_get(sid, f"/orgs/{org_id}/networktemplates/{other_summary['id']}")
+                    for profile in list(needed):
+                        if profile in other.get("port_usages", {}):
+                            usages[profile] = other["port_usages"][profile]
+                            needed.discard(profile)
+                except Exception:
+                    continue
+
+        # Build a set of (src, equals) for existing rules to prevent duplicates
+        existing_keys = {
+            (rx.get("src", ""), rx.get("equals", "") or rx.get("value", ""))
+            for rx in rules
+        }
+
+        for r in rules_body:
+            src   = (r.get("src",   "") or "").strip()
+            value = (r.get("value", "") or "").strip()
+            usage = (r.get("usage", "") or "").strip()
+            if not src or not usage:
+                continue
+            if (src, value) in existing_keys:
+                continue   # duplicate — skip
+            if src == "lldp_system_name":
+                rule = {"src": src, "expression": f"[0:{len(value)}]", "equals": value, "usage": usage}
+            elif src == "link_peermac":
+                rule = {"src": src, "expression": "[0:8]", "equals": value, "usage": usage}
+            else:
+                rule = {"src": src, "equals": value, "usage": usage}
+            existing_keys.add((src, value))
+            rules.append(rule)
+        dyn["rules"]        = rules
+        usages["dynamic"]   = dyn
+        tmpl["port_usages"] = usages
+        resp = mist_put(sid, f"/orgs/{org_id}/networktemplates/{tmpl_id}", tmpl)
+        if resp.ok:
+            return jsonify({"ok": True, "rules": rules})
+        return jsonify({"error": resp.text[:200]}), resp.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -283,6 +283,7 @@
     .source-line { font-size: 11px; color: var(--muted); margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; align-items: flex-start; gap: 6px; line-height: 1.5; }
     .source-line code { font-family: monospace; font-size: 10px; }
     .empty-receipt { padding: 20px 0; color: var(--muted); font-size: 13px; text-align: center; }
+    .receipt-note  { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -707,7 +708,7 @@ function calcPlanChecks() {
     actionLabel: wanIssues ? "Fix →" : null,
   });
 
-  // DPC (informational)
+  // DPC Setup (add known devices / rules)
   checks.push({
     id: "dpc-plan",
     name: "Dynamic Port Configuration",
@@ -718,6 +719,7 @@ function calcPlanChecks() {
     optional: !dpc.has_rules,
     actionLabel: !dpc.has_rules ? "Set up →" : null,
   });
+
 
   const required = checks.filter(c => !c.optional);
   const passing  = required.filter(c => c.status === "green").length;
@@ -1198,7 +1200,7 @@ function openDrawer(id) {
   }
 
   if (id === "dpc-plan") {
-    _renderDpcDrawer();
+    renderDpcDiscoverDrawer();
     return;
   }
 
@@ -1456,6 +1458,322 @@ async function convertToTemplate(wlanId, siteId, siteName) {
     if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
     alert(`Failed: ${e.message}`);
   }
+}
+
+// ── DPC Discovery drawer ─────────────────────────────────────────────────────
+
+const _dpcDiscover = {
+  view:     "list",   // "list" | "detail"
+  tmplId:   null,
+  tmplName: null,
+  phase:    "idle",   // "idle" | "scanning" | "results" | "applying" | "done"
+  lldpGroups:   [],
+  ouiGroups:    [],
+  profiles:     [],      // all org profiles — for assignment dropdown
+  tmplProfiles: [],      // profiles in this template only — for the remove list
+  assignments:  {},
+  devicesScanned: 0,
+  portsScanned:   0,
+  errorMsg:       null,
+};
+
+function _dpcAllGroups() {
+  return [..._dpcDiscover.lldpGroups, ..._dpcDiscover.ouiGroups];
+}
+
+// Auto-suggest a profile for a group based on name similarity.
+// Returns profile name string or null.
+function _dpcSuggestProfile(group, profiles) {
+  if (!profiles.length) return null;
+  // Normalize: lowercase, strip non-alphanumeric
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const gval = norm(group.value);
+  // Also try manufacturer name for OUI groups
+  const makes = (group.makes || []).map(norm);
+
+  // 1. Exact match: profile name === normalised group value
+  for (const p of profiles) {
+    if (norm(p) === gval) return p;
+  }
+  // 2. Group value starts with profile name (e.g. "ap-" starts with "ap")
+  for (const p of profiles) {
+    const pn = norm(p);
+    if (pn && gval.startsWith(pn)) return p;
+  }
+  // 3. Profile name is contained in group value (e.g. "poe_off" in "poe-off-cam")
+  for (const p of profiles) {
+    const pn = norm(p);
+    if (pn && gval.includes(pn)) return p;
+  }
+  // 4. Check manufacturer names against profiles (for OUI groups)
+  for (const make of makes) {
+    for (const p of profiles) {
+      const pn = norm(p);
+      if (pn && (make.includes(pn) || pn.includes(make.slice(0, 4)))) return p;
+    }
+  }
+  return null;
+}
+
+// Auto-assign suggestions for all un-assigned groups, return count of new assignments.
+function _dpcAutoSuggest() {
+  const { tmplProfiles } = _dpcDiscover;
+  let count = 0;
+  for (const g of _dpcAllGroups()) {
+    if (_dpcDiscover.assignments[g.id]) continue;   // already set by user
+    const suggestion = _dpcSuggestProfile(g, tmplProfiles);
+    if (suggestion) {
+      _dpcDiscover.assignments[g.id] = suggestion;
+      count++;
+    }
+  }
+  return count;
+}
+
+function renderDpcDiscoverDrawer() {
+  const b     = state.bp || {};
+  const tmpls = (b.dns_ntp || {}).templates || [];
+
+  if (_dpcDiscover.view === "list") {
+    const rows = tmpls.map(t => `
+      <div class="receipt-row" style="align-items:center">
+        <div class="receipt-row-name" style="flex:1">
+          <strong>${t.name}</strong>
+          ${t.has_dpc ? `<div class="receipt-row-sub">${t.dpc_rules} rule${t.dpc_rules!==1?"s":""} configured</div>` : ""}
+        </div>
+        <button class="gonogo-fix" onclick="dpcDiscoverOpen('${t.id}','${t.name.replace(/'/g,"\\'")}')">Scan →</button>
+      </div>`).join("");
+
+    openDrawerContent("Dynamic Port Configuration",
+      "Scan your network to auto-generate DPC rules",
+      `${rows || '<div class="empty-receipt">No network templates found.</div>'}
+       <div class="source-line">&#128203; Scans wired &amp; wireless clients + port LLDP data from the last 7 days</div>`,
+      "");
+    return;
+  }
+
+  // ── Detail view ──
+  const { tmplId, tmplName, phase, lldpGroups, ouiGroups, profiles,
+          tmplProfiles, assignments, devicesScanned, portsScanned, errorMsg } = _dpcDiscover;
+
+  const backBtn = `<button style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;padding:0 0 12px;display:flex;align-items:center;gap:4px"
+    onclick="dpcDiscoverBack()">← All templates</button>`;
+
+  if (phase === "idle" || phase === "loading_profiles") {
+    const _SYS_PROFILES = new Set(["ap","default","disabled","dot1x","iot","uplink"]);
+    const profileChips = phase === "loading_profiles"
+      ? `<div style="font-size:12px;color:var(--muted);padding:8px 0">Loading profiles…</div>`
+      : tmplProfiles.length
+        ? tmplProfiles.map(p => `
+            <div style="padding:6px 0;border-bottom:1px solid var(--border)">
+              <code style="font-size:12px">${p}</code>
+            </div>`).join("")
+        : `<div style="font-size:12px;color:var(--muted);padding:8px 0">No profiles found.</div>`;
+
+    openDrawerContent(tmplName, "Ready to scan",
+      `${backBtn}
+       <div style="margin-bottom:16px">
+         <div class="receipt-section" style="margin-bottom:8px">Port profiles in template</div>
+         ${profileChips}
+       </div>
+       <div style="padding:24px 0;text-align:center;color:var(--muted);border-top:1px solid var(--border)">
+         <div style="font-size:12px;line-height:1.6">Finds device groups by LLDP name prefix and MAC OUI.<br>Assign each group a port profile to create DPC rules.</div>
+       </div>`,
+      `<button class="drawer-btn-primary" onclick="dpcDiscoverScan('${tmplId}')">Scan for devices →</button>`);
+    return;
+  }
+
+  if (phase === "scanning") {
+    openDrawerContent(tmplName, "Scanning…",
+      `${backBtn}<div class="phase-loading" style="padding:40px 0"><div class="spinner"></div>Analysing connected devices…</div>`,
+      "");
+    return;
+  }
+
+  if (phase === "error") {
+    openDrawerContent(tmplName, "Scan failed",
+      `${backBtn}<div class="phase-error">${errorMsg || "Unknown error"}</div>`,
+      `<button class="drawer-btn-secondary" onclick="dpcDiscoverScan('${tmplId}')">Retry →</button>`);
+    return;
+  }
+
+  if (phase === "done") {
+    openDrawerContent(tmplName, "Rules created",
+      `${backBtn}
+       <div style="padding:32px 0;text-align:center">
+         <div style="font-size:28px;margin-bottom:12px">✓</div>
+         <div style="font-weight:500;color:var(--text)">DPC rules applied to template</div>
+       </div>`,
+      `<button class="drawer-btn-secondary" onclick="dpcDiscoverBack()">← Back</button>`);
+    return;
+  }
+
+  // phase === "results" | "applying"
+  const profileOpts = profiles.map(p => `<option value="${p}">${p}</option>`).join("");
+  const allGroups   = _dpcAllGroups();
+  const readyCount  = allGroups.filter(g => assignments[g.id]).length;
+
+  function groupCard(g) {
+    const isSrc    = g.src === "lldp_system_name";
+    const badge    = isSrc ? "LLDP System Name" : "MAC OUI";
+    const exStr    = (g.examples || []).join(", ");
+    const makeStr  = (g.makes || []).join(", ");
+    const cur      = assignments[g.id] || "";
+    return `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <div style="min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+              <span class="check-badge badge-info" style="font-size:10px">${badge}</span>
+              <strong style="font-size:13px">"${g.value}"</strong>
+              <span style="font-size:11px;color:var(--muted)">${g.count} device${g.count!==1?"s":""}</span>
+            </div>
+            ${makeStr ? `<div style="font-size:11px;color:var(--muted)">${makeStr}</div>` : ""}
+            <div style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:2px">${exStr}</div>
+          </div>
+        </div>
+        <select class="inline-input" style="margin:0" onchange="dpcDiscoverAssign('${g.id}',this.value)">
+          <option value="">— assign port profile —</option>
+          ${tmplProfiles.map(p => `<option value="${p}" ${cur===p?"selected":""}>${p}</option>`).join("")}
+        </select>
+      </div>`;
+  }
+
+  const stats = `<div style="font-size:11px;color:var(--muted);margin-bottom:14px">${devicesScanned} devices · ${portsScanned} ports scanned</div>`;
+
+  const lldpSection = lldpGroups.length
+    ? `<div class="receipt-section">LLDP Name Patterns</div>${lldpGroups.map(groupCard).join("")}`
+    : "";
+  const ouiSection  = ouiGroups.length
+    ? `<div class="receipt-section">MAC OUI Groups</div>${ouiGroups.map(groupCard).join("")}`
+    : "";
+  const empty = !lldpGroups.length && !ouiGroups.length
+    ? `<div class="empty-receipt">No device groups found — try a longer scan window or check that clients are connected.</div>`
+    : "";
+
+  const applyLabel = phase === "applying" ? "Applying…"
+    : `Create ${readyCount} rule${readyCount!==1?"s":""}`;
+
+  const footer = allGroups.length
+    ? `<button class="drawer-btn-primary" ${phase==="applying"||readyCount===0?"disabled":""}
+         onclick="dpcDiscoverApply('${tmplId}')">${applyLabel}</button>`
+    : "";
+
+  openDrawerContent(tmplName,
+    `${allGroups.length} group${allGroups.length!==1?"s":""} found`,
+    `${backBtn}${stats}${lldpSection}${ouiSection}${empty}`, footer);
+}
+
+async function dpcDiscoverOpen(tmplId, tmplName) {
+  _dpcDiscover.view        = "detail";
+  _dpcDiscover.tmplId      = tmplId;
+  _dpcDiscover.tmplName    = tmplName;
+  _dpcDiscover.phase       = "loading_profiles";
+  _dpcDiscover.lldpGroups   = [];
+  _dpcDiscover.ouiGroups    = [];
+  _dpcDiscover.profiles     = [];
+  _dpcDiscover.tmplProfiles = [];
+  _dpcDiscover.assignments  = {};
+  renderDpcDiscoverDrawer();
+  try {
+    const res  = await fetch(`/api/dpc_discover/${ORG_ID}/${tmplId}?profiles_only=1`);
+    const data = await res.json();
+    if (res.ok) {
+      _dpcDiscover.profiles     = data.profiles      || [];
+      _dpcDiscover.tmplProfiles = data.tmpl_profiles || [];
+    }
+  } catch(_) {}
+  _dpcDiscover.phase = "idle";
+  renderDpcDiscoverDrawer();
+}
+
+async function dpcDeleteProfile(tmplId, profileName) {
+  if (!confirm(`Remove port profile "${profileName}" from this template?`)) return;
+  try {
+    const res  = await fetch(`/api/template_profile/${ORG_ID}/${tmplId}/${encodeURIComponent(profileName)}`, {method: "DELETE"});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    _dpcDiscover.tmplProfiles = data.profiles || [];
+    // Clear any assignment that referenced this profile
+    if (_dpcDiscover.assignments) {
+      for (const [k, v] of Object.entries(_dpcDiscover.assignments)) {
+        if (v === profileName) delete _dpcDiscover.assignments[k];
+      }
+    }
+    renderDpcDiscoverDrawer();
+  } catch(e) {
+    alert(`Failed to remove profile: ${e.message}`);
+  }
+}
+
+function dpcDiscoverBack() {
+  _dpcDiscover.view  = "list";
+  _dpcDiscover.phase = "idle";
+  renderDpcDiscoverDrawer();
+}
+
+function dpcDiscoverSuggest() {
+  _dpcAutoSuggest();
+  renderDpcDiscoverDrawer();
+}
+
+function dpcDiscoverAssign(groupId, profile) {
+  if (profile) _dpcDiscover.assignments[groupId] = profile;
+  else         delete _dpcDiscover.assignments[groupId];
+  renderDpcDiscoverDrawer();
+}
+
+async function dpcDiscoverScan(tmplId) {
+  _dpcDiscover.phase = "scanning";
+  renderDpcDiscoverDrawer();
+  try {
+    const res  = await fetch(`/api/dpc_discover/${ORG_ID}/${tmplId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    _dpcDiscover.lldpGroups  = data.lldp_groups || [];
+    _dpcDiscover.ouiGroups   = data.oui_groups  || [];
+    // Keep profiles already loaded on open; only update if scan returns more
+    if (data.profiles && data.profiles.length > _dpcDiscover.profiles.length) {
+      _dpcDiscover.profiles = data.profiles;
+    }
+    if (data.tmpl_profiles) _dpcDiscover.tmplProfiles = data.tmpl_profiles;
+    _dpcDiscover.assignments = {};
+    _dpcDiscover.devicesScanned = data.devices_scanned || 0;
+    _dpcDiscover.portsScanned   = data.ports_scanned   || 0;
+    _dpcDiscover.phase          = "results";
+    _dpcAutoSuggest();   // pre-fill obvious matches
+  } catch(e) {
+    _dpcDiscover.phase    = "error";
+    _dpcDiscover.errorMsg = e.message;
+  }
+  renderDpcDiscoverDrawer();
+}
+
+async function dpcDiscoverApply(tmplId) {
+  const { assignments } = _dpcDiscover;
+  const toApply = _dpcAllGroups()
+    .filter(g => assignments[g.id])
+    .map(g => ({ src: g.src, value: g.value, usage: assignments[g.id] }));
+  if (!toApply.length) return;
+  _dpcDiscover.phase = "applying";
+  renderDpcDiscoverDrawer();
+  try {
+    const res  = await fetch(`/api/dpc_rules_batch/${ORG_ID}/${tmplId}`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({rules: toApply}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    _dpcDiscover.phase = "done";
+    const bpRes = await fetch(`/api/bestpractices/${ORG_ID}`);
+    if (bpRes.ok) state.bp = await bpRes.json();
+    renderPlan();
+  } catch(e) {
+    _dpcDiscover.phase    = "error";
+    _dpcDiscover.errorMsg = e.message;
+  }
+  renderDpcDiscoverDrawer();
 }
 
 // ── DPC → NAC multi-step conversion ──────────────────────────────────────────
