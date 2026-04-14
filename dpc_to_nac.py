@@ -1051,10 +1051,16 @@ def api_deploy_status(org_id):
             try:    return fn(*args)
             except: return None
 
-        with ThreadPoolExecutor(max_workers=6) as pool:
+        def _dev_results(r):
+            r = r or {}
+            return r.get("results", []) if isinstance(r, dict) else (r if isinstance(r, list) else [])
+
+        with ThreadPoolExecutor(max_workers=9) as pool:
             f_sites    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/sites")
-            f_devices  = pool.submit(_fetch, mist_get,  sid,
-                                     f"/orgs/{org_id}/stats/devices?status=all&limit=1000")
+            f_ap       = pool.submit(_fetch, mist_get,  sid, f"/orgs/{org_id}/stats/devices?type=ap&limit=1000")
+            f_switch   = pool.submit(_fetch, mist_get,  sid, f"/orgs/{org_id}/stats/devices?type=switch&limit=1000")
+            f_gateway  = pool.submit(_fetch, mist_get,  sid, f"/orgs/{org_id}/stats/devices?type=gateway&limit=1000")
+            f_mxedge   = pool.submit(_fetch, mist_get,  sid, f"/orgs/{org_id}/stats/devices?type=mxedge&limit=1000")
             f_tmpls    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/templates")
             f_dpc      = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/networktemplates")
             f_wlans    = pool.submit(_fetch, mist_list, sid, f"/orgs/{org_id}/wlans")
@@ -1062,9 +1068,17 @@ def api_deploy_status(org_id):
         sites_raw  = (f_sites.result()  or ([], None))[0]
         site_names = {s["id"]: s.get("name", s["id"]) for s in sites_raw}
 
-        raw_dev    = f_devices.result() or {}
-        devices    = (raw_dev.get("results", []) if isinstance(raw_dev, dict)
-                      else raw_dev if isinstance(raw_dev, list) else [])
+        # Combine and deduplicate by device id
+        _seen_dev = set()
+        devices   = []
+        for d in (_dev_results(f_ap.result())      +
+                  _dev_results(f_switch.result())  +
+                  _dev_results(f_gateway.result()) +
+                  _dev_results(f_mxedge.result())):
+            key = d.get("id") or d.get("mac")
+            if key and key not in _seen_dev:
+                _seen_dev.add(key)
+                devices.append(d)
 
         tmpls_raw  = (f_tmpls.result() or ([], None))[0]
         dpc_raw    = (f_dpc.result()   or ([], None))[0]
@@ -1088,8 +1102,9 @@ def api_deploy_status(org_id):
             for tmpl in dpc_raw
         )
 
-        # ── Aggregate device stats per site ───────────────────────────────────
+        # ── Aggregate device stats per site + build per-type device lists ────────
         site_dev = {}   # site_id → {total, online, offline, has_gateway, wan_up, types}
+        devices_by_type = {"ap": [], "switch": [], "gateway": [], "mxedge": []}
         for d in devices:
             site_id = d.get("site_id")
             if not site_id:
@@ -1103,6 +1118,15 @@ def api_deploy_status(org_id):
             s   = site_dev[site_id]
             ok  = d.get("status") == "connected"
             typ = d.get("type", "")
+            if typ in devices_by_type:
+                devices_by_type[typ].append({
+                    "id":     d.get("id", ""),
+                    "name":   d.get("name") or d.get("hostname") or d.get("mac", ""),
+                    "model":  d.get("model", ""),
+                    "online": ok,
+                    "site":   site_names.get(site_id, ""),
+                    "ip":     d.get("ip_address") or d.get("ip") or "",
+                })
             s["total"]  += 1
             s["online"]  = s["online"]  + (1 if ok else 0)
             s["offline"] = s["offline"] + (0 if ok else 1)
@@ -1224,15 +1248,127 @@ def api_deploy_status(org_id):
         sites_go = sum(1 for s in sites_list if s["go"])
 
         return jsonify({
-            "sites":       sites_list,
-            "sites_go":    sites_go,
-            "sites_total": len(site_names),
+            "sites":          sites_list,
+            "sites_go":       sites_go,
+            "sites_total":    len(site_names),
+            "devices_by_type": devices_by_type,
             "totals": {
                 "devices":        total_devices,
                 "devices_online": total_online,
                 "by_type":        by_type_org,
             },
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/deploy_clients/<org_id>")
+def api_deploy_clients(org_id):
+    """Wireless, wired, and NAC client snapshot for the Deploy tab."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+    try:
+        def _fetch(path):
+            try:
+                r = mist_get(sid, path)
+                return r.get("results", []) if isinstance(r, dict) else (r if isinstance(r, list) else [])
+            except Exception:
+                return []
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            f_wifi    = pool.submit(_fetch, f"/orgs/{org_id}/clients/search?limit=1000&duration=1d")
+            f_wired   = pool.submit(_fetch, f"/orgs/{org_id}/wired_clients/search?limit=1000&duration=1d")
+            f_nac     = pool.submit(_fetch, f"/orgs/{org_id}/nac_clients/search?limit=1000")
+            f_dpc_pat = pool.submit(_get_org_dpc_patterns, sid, org_id)
+
+        lldp_patterns, oui_patterns = f_dpc_pat.result()
+
+        def _is_dpc(c):
+            if not lldp_patterns and not oui_patterns:
+                return False
+            name = (c.get("last_hostname") or _normalize_field(c.get("hostname") or "")).lower()
+            mac_str = mac_to_colon(c.get("mac", "")).upper()
+            oui = mac_str[:8]
+            for val, n in lldp_patterns:
+                if name[:n] == val[:n]:
+                    return True
+            return oui in oui_patterns
+
+        def _wifi_entry(c):
+            # Mist returns most fields as lists; last_* fields are scalars
+            return {
+                "mac":      mac_to_colon(c.get("mac", "")),
+                "hostname": c.get("last_hostname") or _normalize_field(c.get("hostname") or ""),
+                "ssid":     c.get("last_ssid")     or _normalize_field(c.get("ssid") or ""),
+                "mfg":      c.get("mfg", ""),
+                "site":     _normalize_field(c.get("site_name") or c.get("site_id", "")),
+            }
+
+        def _wired_entry(c):
+            return {
+                "mac":      mac_to_colon(c.get("mac", "")),
+                "hostname": _normalize_field(c.get("hostname") or ""),
+                "port":     c.get("last_port_id") or _normalize_field(c.get("port_id") or ""),
+                "vlan":     str(c.get("last_vlan") or ""),
+                "mfg":      c.get("manufacture", ""),
+                "site":     _normalize_field(c.get("site_name") or c.get("site_id", "")),
+                "dpc":      _is_dpc(c),
+            }
+
+        def _nac_entry(c):
+            return {
+                "mac":      mac_to_colon(_normalize_field(c.get("mac") or c.get("client_mac", ""))),
+                "username": _normalize_field(c.get("username") or c.get("name", "")),
+                "type":     _normalize_field(c.get("type", "")),
+                "site":     _normalize_field(c.get("site_name") or c.get("site_id", "")),
+            }
+
+        return jsonify({
+            "wireless": [_wifi_entry(c)  for c in f_wifi.result()],
+            "wired":    [_wired_entry(c) for c in f_wired.result()],
+            "nac":      [_nac_entry(c)   for c in f_nac.result()],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/debug_deploy/<org_id>")
+def api_debug_deploy(org_id):
+    """Temporary: dump raw device types and client counts to diagnose deploy tab issues."""
+    if not valid_uuid(org_id): return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid: return jsonify({"error": "Not authenticated"}), 401
+    try:
+        raw = mist_get(sid, f"/orgs/{org_id}/stats/devices?status=all&limit=1000")
+        devices = raw.get("results", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+        type_counts = {}
+        samples = []
+        for d in devices:
+            t = d.get("type", "unknown")
+            type_counts[t] = type_counts.get(t, 0) + 1
+            if len(samples) < 3 and t in ("switch", "gateway"):
+                samples.append({"type": t, "name": d.get("name") or d.get("hostname"),
+                                 "site_id": d.get("site_id"), "status": d.get("status"),
+                                 "model": d.get("model")})
+        try:
+            wired = mist_get(sid, f"/orgs/{org_id}/wired_clients/search?limit=5&duration=1d")
+            wired_sample = wired.get("results", [])[:2] if isinstance(wired, dict) else []
+        except Exception as e:
+            wired_sample = [str(e)]
+        try:
+            wifi = mist_get(sid, f"/orgs/{org_id}/clients/search?limit=5&duration=1d")
+            wifi_sample = wifi.get("results", [])[:2] if isinstance(wifi, dict) else []
+        except Exception as e:
+            wifi_sample = [str(e)]
+        return jsonify({"device_count": len(devices), "type_counts": type_counts,
+                        "switch_gateway_samples": samples,
+                        "wired_client_sample": wired_sample,
+                        "wifi_client_sample": wifi_sample})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2234,6 +2370,49 @@ _DPC_SKIP_PROFILES = {"dynamic", "default", "disabled", "dot1x", ""}
 # Mist system-defined switch port profiles — always available on every template
 # but never returned in port_usages by the API
 _MIST_SYSTEM_PROFILES = ["ap", "default", "disabled", "dot1x", "iot", "uplink"]
+
+
+def _get_org_dpc_patterns(sid, org_id):
+    """Return (lldp_patterns, oui_patterns) built from all org DPC rules.
+
+    lldp_patterns: list of (value_lower, prefix_len)
+    oui_patterns:  list of "XX:XX:XX" strings
+    """
+    lldp_patterns, oui_patterns = [], []
+    try:
+        tmpl_list = mist_get(sid, f"/orgs/{org_id}/networktemplates")
+        if not isinstance(tmpl_list, list):
+            return lldp_patterns, oui_patterns
+        tmpl_ids = [t["id"] for t in tmpl_list if t.get("id")]
+
+        def _fetch_rules(tid):
+            try:
+                t = mist_get(sid, f"/orgs/{org_id}/networktemplates/{tid}")
+                return t.get("port_usages", {}).get("dynamic", {}).get("rules", [])
+            except Exception:
+                return []
+
+        all_rules = []
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for rules in pool.map(_fetch_rules, tmpl_ids):
+                all_rules.extend(rules)
+
+        for rule in all_rules:
+            src = rule.get("src", "")
+            val = (rule.get("equals") or rule.get("value") or "").strip()
+            if not val:
+                continue
+            if src == "lldp_system_name":
+                try:
+                    n = int(rule.get("expression", f"[0:{len(val)}]").strip("[]").split(":")[1])
+                except Exception:
+                    n = len(val)
+                lldp_patterns.append((val.lower(), n))
+            elif src == "link_peermac":
+                oui_patterns.append(val.upper()[:8])
+    except Exception:
+        pass
+    return lldp_patterns, oui_patterns
 
 
 def _all_org_port_profiles(sid, org_id):

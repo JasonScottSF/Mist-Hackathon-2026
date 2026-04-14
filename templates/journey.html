@@ -367,7 +367,7 @@ const ORG_ID      = {{ org_id | tojson }};
 const MANAGE_HOST = "manage.mist.com"; // updated once health data loads
 
 // ── State ────────────────────────────────────────────────────────────────────
-const state = { bp: null, dr: null, health: null, deploy: null };
+const state = { bp: null, dr: null, health: null, deploy: null, deployClients: null };
 
 // ── Phase navigation ──────────────────────────────────────────────────────────
 let currentPhase = "deploy";
@@ -425,22 +425,39 @@ function sevClass(sev) {
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 async function loadAll() {
-  const [bpRes, drRes, healthRes, deployRes] = await Promise.allSettled([
+  const [bpRes, drRes, healthRes, deployRes, clientsRes] = await Promise.allSettled([
     fetch(`/api/bestpractices/${ORG_ID}`).then(r => r.json()),
     fetch(`/api/datarates/${ORG_ID}`).then(r => r.json()),
     fetch(`/api/health/${ORG_ID}`).then(r => r.json()),
     fetch(`/api/deploy_status/${ORG_ID}`).then(r => r.json()),
+    fetch(`/api/deploy_clients/${ORG_ID}`).then(r => r.json()),
   ]);
 
-  state.bp     = bpRes.status     === "fulfilled" ? bpRes.value     : null;
-  state.dr     = drRes.status     === "fulfilled" ? drRes.value     : null;
-  state.health = healthRes.status === "fulfilled" ? healthRes.value : null;
-  state.deploy = deployRes.status === "fulfilled" ? deployRes.value : null;
+  state.bp            = bpRes.status     === "fulfilled" ? bpRes.value     : null;
+  state.dr            = drRes.status     === "fulfilled" ? drRes.value     : null;
+  state.health        = healthRes.status === "fulfilled" ? healthRes.value : null;
+  state.deploy        = deployRes.status === "fulfilled" ? deployRes.value : null;
+  state.deployClients = clientsRes.status === "fulfilled" ? clientsRes.value : null;
 
   renderPlan();
   renderDeploy();
   renderOperate();
 }
+
+async function refreshDeploy() {
+  try {
+    const [deployRes, clientsRes] = await Promise.all([
+      fetch(`/api/deploy_status/${ORG_ID}`).then(r => r.json()),
+      fetch(`/api/deploy_clients/${ORG_ID}`).then(r => r.json()),
+    ]);
+    state.deploy        = deployRes;
+    state.deployClients = clientsRes;
+    renderDeploy();
+  } catch(_) {}
+}
+
+// Auto-refresh deploy tab every 30 seconds
+setInterval(() => { if (currentPhase === "deploy") refreshDeploy(); }, 30000);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // GOLDEN CONFIG TEMPLATES
@@ -804,6 +821,90 @@ function toggleSiteCard(siteId) {
   const card = document.getElementById(`site-card-${siteId}`);
   if (card) card.classList.toggle("expanded");
 }
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle("expanded");
+}
+
+function _deployDeviceSection(typeKey, label, devices) {
+  if (!devices || !devices.length) return "";
+  const online = devices.filter(d => d.online).length;
+  const total  = devices.length;
+  const dotCls = online === total ? "green" : online > 0 ? "yellow" : "red";
+  const id     = `deploy-infra-${typeKey}`;
+
+  const rows = devices.map(d => {
+    const cls    = d.online ? "go" : "nogo";
+    const icon   = d.online ? "✓" : "✕";
+    const detail = [d.model, d.site, d.ip].filter(Boolean).join(" · ");
+    return `<div class="gonogo-row">
+      <div class="gonogo-checkbox ${cls}">${icon}</div>
+      <div class="gonogo-info">
+        <div class="gonogo-label">${d.name || d.ip || "Unknown"}</div>
+        ${detail ? `<div class="gonogo-detail">${detail}</div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="site-checklist" id="${id}">
+      <div class="site-checklist-header" onclick="toggleSection('${id}')">
+        <span class="status-dot ${dotCls}" style="flex-shrink:0"></span>
+        <div class="site-checklist-name">${label}</div>
+        <span style="font-size:12px;color:var(--muted)">${online} / ${total} online</span>
+        <span class="site-chevron">›</span>
+      </div>
+      <div class="site-checklist-body">${rows}</div>
+    </div>`;
+}
+
+function _deployClientSection(id, label, clients, dpcBtn) {
+  if (!clients || !clients.length) return "";
+
+  const dpcCount = clients.filter(c => c.dpc).length;
+
+  const rows = clients.map(c => {
+    const name    = c.hostname || c.username || c.mac || "";
+    const detail  = [c.ssid, c.port, c.usage, c.type, c.site].filter(Boolean).join(" · ");
+    const dpcBadge = c.dpc
+      ? `<span class="check-badge badge-yellow" style="font-size:9px;padding:1px 6px;margin-left:4px">DPC</span>`
+      : "";
+    return `<div class="gonogo-row">
+      <div class="gonogo-checkbox go" style="font-size:10px;line-height:1">●</div>
+      <div class="gonogo-info" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <div class="gonogo-label" style="margin:0">${name}</div>
+        ${dpcBadge}
+        ${detail ? `<div class="gonogo-detail" style="width:100%;margin-top:1px">${detail}</div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  const headerExtra = dpcBtn && dpcCount > 0
+    ? `<span style="font-size:12px;color:var(--muted)">${clients.length} · ${dpcCount} DPC</span>`
+    : `<span style="font-size:12px;color:var(--muted)">${clients.length} client${clients.length!==1?"s":""}</span>`;
+
+  const footer = dpcBtn && dpcCount > 0
+    ? `<div style="padding:10px 16px 14px;border-top:1px solid var(--border)">
+         <button class="gonogo-fix" onclick="_dpc.phase='idle';_renderDpcDrawer()">
+           Convert ${dpcCount} DPC client${dpcCount!==1?"s":""} → NAC →
+         </button>
+       </div>`
+    : "";
+
+  return `
+    <div class="site-checklist" id="${id}">
+      <div class="site-checklist-header" onclick="toggleSection('${id}')">
+        <span class="status-dot green" style="flex-shrink:0"></span>
+        <div class="site-checklist-name">${label}</div>
+        ${headerExtra}
+        <span class="site-chevron">›</span>
+      </div>
+      <div class="site-checklist-body">
+        ${rows}
+        ${footer}
+      </div>
+    </div>`;
+}
 
 function renderDeploy() {
   const el = document.getElementById("deploy-content");
@@ -811,18 +912,21 @@ function renderDeploy() {
     el.innerHTML = `<div class="phase-error">Failed to load device status.</div>`;
     return;
   }
-  const d    = state.deploy;
-  const sites = d.sites || [];
-  const tot   = d.totals || {};
+  const d   = state.deploy;
+  const tot = d.totals || {};
+  const dbt = d.devices_by_type || {};
+  const cli = state.deployClients || {};
 
-  const sitesGo   = d.sites_go   || 0;
-  const sitesTotal= d.sites_total || 0;
-  const allGo     = sitesGo === sitesTotal && sitesTotal > 0;
-  const goClr     = allGo ? "green" : sitesGo > 0 ? "yellow" : "red";
-  const devClr    = tot.devices_online === tot.devices && tot.devices > 0 ? "green"
-                  : tot.devices_online > 0 ? "yellow" : "red";
+  const sitesGo    = d.sites_go    || 0;
+  const sitesTotal = d.sites_total || 0;
+  const allGo      = sitesGo === sitesTotal && sitesTotal > 0;
+  const goClr      = allGo ? "green" : sitesGo > 0 ? "yellow" : "red";
+  const devOnline  = tot.devices_online || 0;
+  const devTotal   = tot.devices || 0;
+  const devClr     = devOnline === devTotal && devTotal > 0 ? "green"
+                   : devOnline > 0 ? "yellow" : "red";
 
-  // Summary bar
+  // ── Summary bar ────────────────────────────────────────────────────────────
   const summary = `
     <div class="deploy-summary">
       <div class="deploy-summary-stat">
@@ -831,7 +935,7 @@ function renderDeploy() {
       </div>
       <div class="deploy-summary-divider"></div>
       <div class="deploy-summary-stat">
-        <div class="deploy-summary-val ${devClr}">${tot.devices_online || 0} / ${tot.devices || 0}</div>
+        <div class="deploy-summary-val ${devClr}">${devOnline} / ${devTotal}</div>
         <div class="deploy-summary-label">Devices online</div>
       </div>
       <div class="deploy-summary-divider"></div>
@@ -849,13 +953,25 @@ function renderDeploy() {
       </div>
     </div>`;
 
-  // Per-site checklist cards
-  const siteCards = sites.map(s => {
-    const isGo    = s.go;
-    const checks  = s.checks || [];
-    const issueCount = checks.filter(c => !c.go && !c.na).length;
+  // ── Infrastructure drawers ─────────────────────────────────────────────────
+  const infraSections = [
+    _deployDeviceSection("ap",      "Access Points", dbt.ap),
+    _deployDeviceSection("switch",  "Switches",      dbt.switch),
+    _deployDeviceSection("gateway", "WAN Edge", dbt.gateway),
+    _deployDeviceSection("mxedge",  "Mist Edges",    dbt.mxedge),
+  ].filter(Boolean).join("");
 
-    const checkRows = checks.map(c => {
+  const infraBlock = infraSections ? `
+    <div class="check-group">
+      <div class="group-header"><div class="group-dot" style="background:var(--${devClr})"></div>Infrastructure</div>
+      ${infraSections}
+    </div>` : "";
+
+  // ── Site cards ─────────────────────────────────────────────────────────────
+  const siteCards = (d.sites || []).map(s => {
+    const isGo      = s.go;
+    const issueCount = (s.checks || []).filter(c => !c.go && !c.na).length;
+    const checkRows  = (s.checks || []).map(c => {
       const boxCls  = c.na ? "na" : c.go ? "go" : "nogo";
       const boxIcon = c.na ? "—"  : c.go ? "✓"  : "✕";
       const fixLink = (!c.go && !c.na && c.fix_url)
@@ -865,15 +981,12 @@ function renderDeploy() {
         <div class="gonogo-info">
           <div class="gonogo-label${c.na ? " na" : ""}">${c.label}</div>
           <div class="gonogo-detail">${c.detail}</div>
-        </div>
-        ${fixLink}
+        </div>${fixLink}
       </div>`;
     }).join("");
-
     const headerSub = isGo
       ? `<span style="font-size:12px;color:var(--muted)">${s.total} device${s.total!==1?"s":""} · all checks passed</span>`
       : `<span style="font-size:12px;color:var(--red)">${issueCount} issue${issueCount!==1?"s":""} need attention</span>`;
-
     return `
       <div class="site-checklist${isGo ? "" : " expanded"}" id="site-card-${s.id}">
         <div class="site-checklist-header" onclick="toggleSiteCard('${s.id}')">
@@ -886,7 +999,34 @@ function renderDeploy() {
       </div>`;
   }).join("");
 
-  el.innerHTML = summary + (siteCards || `<div style="padding:20px;color:var(--muted);font-size:13px;text-align:center">No sites found.</div>`);
+  const sitesBlock = `
+    <div class="check-group">
+      <div class="group-header"><div class="group-dot" style="background:var(--${goClr})"></div>Sites</div>
+      ${siteCards || `<div style="padding:12px 0;color:var(--muted);font-size:13px">No sites found.</div>`}
+    </div>`;
+
+  // ── Client drawers ─────────────────────────────────────────────────────────
+  const dpcClients = (cli.wired || []).filter(c => c.dpc);
+  const clientSections = [
+    _deployClientSection("deploy-cli-wifi",  "Wireless Clients", cli.wireless, false),
+    _deployClientSection("deploy-cli-wired", "Wired Clients",    cli.wired,    false),
+    _deployClientSection("deploy-cli-dpc",   "DPC Clients",      dpcClients,   true),
+    _deployClientSection("deploy-cli-nac",   "NAC Clients",      cli.nac,      false),
+  ].filter(Boolean).join("");
+
+  const totalClients = (cli.wireless?.length || 0) + (cli.wired?.length || 0) + (cli.nac?.length || 0);
+  const clientsBlock = `
+    <div class="check-group">
+      <div class="group-header" style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="group-dot" style="background:var(--blue)"></div>Clients
+        </div>
+        <button onclick="refreshDeploy()" style="font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--muted)">↻ Refresh</button>
+      </div>
+      ${clientSections || `<div style="padding:12px 0;color:var(--muted);font-size:13px">No clients seen in the last hour.</div>`}
+    </div>`;
+
+  el.innerHTML = summary + sitesBlock + infraBlock + clientsBlock;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
