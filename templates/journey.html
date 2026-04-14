@@ -988,7 +988,7 @@ function renderDeploy() {
       ? `<span style="font-size:12px;color:var(--muted)">${s.total} device${s.total!==1?"s":""} · all checks passed</span>`
       : `<span style="font-size:12px;color:var(--red)">${issueCount} issue${issueCount!==1?"s":""} need attention</span>`;
     return `
-      <div class="site-checklist${isGo ? "" : " expanded"}" id="site-card-${s.id}">
+      <div class="site-checklist" id="site-card-${s.id}">
         <div class="site-checklist-header" onclick="toggleSiteCard('${s.id}')">
           <span class="site-go-badge ${isGo ? "go" : "nogo"}">${isGo ? "GO" : "NO GO"}</span>
           <div class="site-checklist-name">${s.name}</div>
