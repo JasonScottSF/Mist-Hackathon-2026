@@ -817,6 +817,79 @@ function renderPlan() {
 // ══════════════════════════════════════════════════════════════════════════════
 // DEPLOY
 // ══════════════════════════════════════════════════════════════════════════════
+
+// ── Site sign-off (localStorage) ─────────────────────────────────────────────
+const _signOffEditing = new Set();
+
+function _signOffKey(siteId)  { return `deploy_signoff_${ORG_ID}_${siteId}`; }
+function _getSignOff(siteId)  {
+  try { return JSON.parse(localStorage.getItem(_signOffKey(siteId))); } catch { return null; }
+}
+function _clearSignOff(siteId) {
+  localStorage.removeItem(_signOffKey(siteId));
+  _signOffEditing.delete(siteId);
+  renderDeploy();
+}
+function _toggleSignOffForm(siteId) {
+  _signOffEditing.has(siteId) ? _signOffEditing.delete(siteId) : _signOffEditing.add(siteId);
+  renderDeploy();
+  if (_signOffEditing.has(siteId)) {
+    setTimeout(() => document.getElementById(`signoff-note-${siteId}`)?.focus(), 50);
+  }
+}
+function _submitSignOff(siteId) {
+  const note = (document.getElementById(`signoff-note-${siteId}`)?.value || "").trim();
+  localStorage.setItem(_signOffKey(siteId), JSON.stringify({
+    ts: new Date().toISOString(), note
+  }));
+  _signOffEditing.delete(siteId);
+  renderDeploy();
+}
+
+// ── Export deployment report as CSV ─────────────────────────────────────────
+function exportDeployReport() {
+  const d = state.deploy;
+  if (!d || !d.sites) return;
+
+  // Collect check labels from first site
+  const checkLabels = (d.sites[0]?.checks || []).map(c => c.label);
+  const header = [
+    "Site", "Status", "Devices Online", "Devices Total",
+    "APs", "Switches", "Gateways",
+    "Signed Off", "Sign-off Time", "Sign-off Note",
+    ...checkLabels
+  ];
+
+  const rows = (d.sites || []).map(s => {
+    const so   = _getSignOff(s.id);
+    const bt   = s.by_type || {};
+    return [
+      s.name,
+      s.go ? "GO" : "NO GO",
+      s.online  ?? "",
+      s.total   ?? "",
+      bt.ap      ?? 0,
+      bt.switch  ?? 0,
+      bt.gateway ?? 0,
+      so ? "Yes" : "No",
+      so ? new Date(so.ts).toLocaleString() : "",
+      so?.note || "",
+      ...(s.checks || []).map(c => c.na ? "N/A" : c.go ? "Pass" : "Fail"),
+    ];
+  });
+
+  const esc  = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv  = [header, ...rows].map(r => r.map(esc).join(",")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement("a"), {
+    href: url,
+    download: `deploy-report-${new Date().toISOString().slice(0, 10)}.csv`
+  });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function toggleSiteCard(siteId) {
   const card = document.getElementById(`site-card-${siteId}`);
   if (card) card.classList.toggle("expanded");
@@ -969,9 +1042,12 @@ function renderDeploy() {
 
   // ── Site cards ─────────────────────────────────────────────────────────────
   const siteCards = (d.sites || []).map(s => {
-    const isGo      = s.go;
+    const isGo       = s.go;
     const issueCount = (s.checks || []).filter(c => !c.go && !c.na).length;
-    const checkRows  = (s.checks || []).map(c => {
+    const signOff    = _getSignOff(s.id);
+    const isEditing  = _signOffEditing.has(s.id);
+
+    const checkRows = (s.checks || []).map(c => {
       const boxCls  = c.na ? "na" : c.go ? "go" : "nogo";
       const boxIcon = c.na ? "—"  : c.go ? "✓"  : "✕";
       const fixLink = (!c.go && !c.na && c.fix_url)
@@ -984,18 +1060,55 @@ function renderDeploy() {
         </div>${fixLink}
       </div>`;
     }).join("");
+
+    let signOffRow;
+    if (signOff) {
+      const when = new Date(signOff.ts).toLocaleString("en-US", {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+      signOffRow = `<div class="gonogo-row" style="background:rgba(34,197,94,0.04)">
+        <div class="gonogo-checkbox go">✓</div>
+        <div class="gonogo-info">
+          <div class="gonogo-label">Signed off · ${when}</div>
+          ${signOff.note ? `<div class="gonogo-detail">${signOff.note}</div>` : ""}
+        </div>
+        <button class="gonogo-fix" onclick="_clearSignOff('${s.id}')">Remove</button>
+      </div>`;
+    } else if (isEditing) {
+      signOffRow = `<div class="gonogo-row" style="flex-wrap:wrap;gap:8px;align-items:center">
+        <div class="gonogo-checkbox na">—</div>
+        <div class="gonogo-info" style="flex:1;min-width:120px">
+          <input id="signoff-note-${s.id}" class="inline-input" style="width:100%" placeholder="Note (optional)…"
+            onkeydown="if(event.key==='Enter')_submitSignOff('${s.id}')">
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="gonogo-fix" onclick="_submitSignOff('${s.id}')">Confirm →</button>
+          <button class="gonogo-fix" style="color:var(--muted);border-color:var(--border)"
+            onclick="_toggleSignOffForm('${s.id}')">Cancel</button>
+        </div>
+      </div>`;
+    } else {
+      signOffRow = `<div class="gonogo-row">
+        <div class="gonogo-checkbox na">—</div>
+        <div class="gonogo-info"><div class="gonogo-label na">Not signed off</div></div>
+        <button class="gonogo-fix" onclick="_toggleSignOffForm('${s.id}')">Sign off →</button>
+      </div>`;
+    }
+
+    const signOffBadge = signOff
+      ? `<span class="check-badge badge-green" style="font-size:9px;padding:1px 5px">Signed</span>` : "";
     const headerSub = isGo
       ? `<span style="font-size:12px;color:var(--muted)">${s.total} device${s.total!==1?"s":""} · all checks passed</span>`
       : `<span style="font-size:12px;color:var(--red)">${issueCount} issue${issueCount!==1?"s":""} need attention</span>`;
+
     return `
       <div class="site-checklist" id="site-card-${s.id}">
         <div class="site-checklist-header" onclick="toggleSiteCard('${s.id}')">
           <span class="site-go-badge ${isGo ? "go" : "nogo"}">${isGo ? "GO" : "NO GO"}</span>
           <div class="site-checklist-name">${s.name}</div>
+          ${signOffBadge}
           ${headerSub}
           <span class="site-chevron">›</span>
         </div>
-        <div class="site-checklist-body">${checkRows}</div>
+        <div class="site-checklist-body">${checkRows}${signOffRow}</div>
       </div>`;
   }).join("");
 
@@ -1026,7 +1139,32 @@ function renderDeploy() {
       ${clientSections || `<div style="padding:12px 0;color:var(--muted);font-size:13px">No clients seen in the last hour.</div>`}
     </div>`;
 
-  el.innerHTML = summary + sitesBlock + infraBlock + clientsBlock;
+  // ── Workflow ───────────────────────────────────────────────────────────────
+  const signedCount = (d.sites || []).filter(s => _getSignOff(s.id)).length;
+  const totalSites  = (d.sites || []).length;
+  const workflowBlock = `
+    <div class="check-group">
+      <div class="group-header"><div class="group-dot" style="background:var(--purple-lt)"></div>Workflow</div>
+      <div class="check-card">
+        <div class="check-row muted" style="cursor:default">
+          <div class="check-info">
+            <div class="check-name">Site sign-off</div>
+            <div class="check-detail">${signedCount} of ${totalSites} site${totalSites!==1?"s":""} signed off — expand a site card above to sign off</div>
+          </div>
+        </div>
+      </div>
+      <div class="check-card">
+        <div class="check-row muted" style="cursor:default">
+          <div class="check-info">
+            <div class="check-name">Export deployment report</div>
+            <div class="check-detail">Download go/no-go status, device counts, and sign-offs as CSV</div>
+          </div>
+          <button class="check-action" onclick="exportDeployReport()">Export CSV →</button>
+        </div>
+      </div>
+    </div>`;
+
+  el.innerHTML = summary + sitesBlock + infraBlock + clientsBlock + workflowBlock;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
