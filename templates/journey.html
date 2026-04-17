@@ -312,6 +312,9 @@
     .create-success-icon { font-size: 28px; flex-shrink: 0; }
     .create-success-title { font-size: 15px; font-weight: 700; color: var(--green); }
     .create-success-sub   { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .create-bp-link { background: none; border: none; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--purple-lt); padding: 0; text-align: left; transition: color 0.15s; }
+    .create-bp-link:hover { color: #c4b5fd; }
+    .create-bp-link:disabled { color: var(--muted); cursor: default; }
   </style>
 </head>
 <body>
@@ -1409,18 +1412,38 @@ function renderCreate() {
     <div class="create-field">
       <label>Network Template</label>
       <select id="cs-net" class="create-input">${_tmplOptions(opts.network)}</select>
+      <div style="margin-top:5px">
+        <button class="create-bp-link" id="cs-net-bp" onclick="createBestPracticeTemplate('network','cs-net')">
+          ✦ Create best-practice network template
+        </button>
+      </div>
     </div>
     <div class="create-field">
       <label>WLAN Template</label>
       <select id="cs-wlan" class="create-input">${_tmplOptions(opts.wlan)}</select>
+      <div style="margin-top:5px">
+        <button class="create-bp-link" id="cs-wlan-bp" onclick="createBestPracticeTemplate('wlan','cs-wlan')">
+          ✦ Create best-practice WLAN template
+        </button>
+      </div>
     </div>
     <div class="create-field">
       <label>Gateway Template</label>
       <select id="cs-gw" class="create-input">${_tmplOptions(opts.gateway)}</select>
+      <div style="margin-top:5px">
+        <button class="create-bp-link" id="cs-gw-bp" onclick="createBestPracticeTemplate('gateway','cs-gw')">
+          ✦ Create best-practice gateway template
+        </button>
+      </div>
     </div>
     <div class="create-field">
       <label>RF Template</label>
       <select id="cs-rf" class="create-input">${_tmplOptions(opts.rf)}</select>
+      <div style="margin-top:5px">
+        <button class="create-bp-link" id="cs-rf-bp" onclick="createBestPracticeTemplate('rf','cs-rf')">
+          ✦ Create best-practice RF template
+        </button>
+      </div>
     </div>
 
     <div class="create-actions">
@@ -1428,6 +1451,55 @@ function renderCreate() {
       <span id="cs-status" style="font-size:12px;color:var(--muted)"></span>
     </div>
   </div>`;
+}
+
+async function createBestPracticeTemplate(tmplType, selectId) {
+  const btn = document.getElementById(`cs-${tmplType === "network" ? "net" : tmplType === "gateway" ? "gw" : tmplType}-bp`);
+  const sel = document.getElementById(selectId);
+  if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
+
+  try {
+    const resp = await fetch(`/api/create_golden/${ORG_ID}/${tmplType}`, { method: "POST" });
+    const data = await resp.json();
+
+    if (!resp.ok || data.error) {
+      if (btn) { btn.disabled = false; btn.textContent = `✦ Create best-practice ${tmplType} template`; }
+      alert(`Failed to create template: ${data.error || resp.statusText}`);
+      return;
+    }
+
+    // Add or update option in the select and choose it
+    if (sel) {
+      let opt = sel.querySelector(`option[value="${data.id}"]`);
+      if (!opt) {
+        opt = document.createElement("option");
+        opt.value = data.id;
+        opt.textContent = data.name;
+        sel.appendChild(opt);
+      }
+      sel.value = data.id;
+    }
+
+    // Update state.siteOptions so the option persists if renderCreate re-runs
+    if (!state.siteOptions) state.siteOptions = {};
+    const key = tmplType === "network" ? "network" :
+                tmplType === "wlan"    ? "wlan"    :
+                tmplType === "gateway" ? "gateway" : "rf";
+    if (!state.siteOptions[key]) state.siteOptions[key] = [];
+    if (!state.siteOptions[key].find(t => t.id === data.id)) {
+      state.siteOptions[key].push({ id: data.id, name: data.name });
+    }
+
+    const verb = data.created ? "Created" : "Already exists —";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `✓ ${verb} "${data.name}" — selected`;
+      btn.style.color = "var(--green)";
+    }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = `✦ Create best-practice ${tmplType} template`; }
+    alert("Network error — please try again.");
+  }
 }
 
 async function createSite() {

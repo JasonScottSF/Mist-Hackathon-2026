@@ -2940,6 +2940,7 @@ def api_create_rf_template(org_id):
 _GOLDEN_NAME_WLAN    = "HPE Best Practices"
 _GOLDEN_NAME_NETWORK = "HPE Golden — Network"
 _GOLDEN_NAME_RF      = "HPE Golden — RF"
+_GOLDEN_NAME_GATEWAY = "HPE Golden — Gateway"
 
 _GOLDEN_WLAN_TEMPLATE = {
     "name": _GOLDEN_NAME_WLAN,
@@ -3005,6 +3006,23 @@ _GOLDEN_RF_TEMPLATE_V2 = {
     "scanning_enabled": True,
 }
 
+# Best-practice gateway (SD-WAN / SRX) template.
+# Enables path-selection, sets public NTP/DNS, and enforces
+# recommended BGP/routing hardening flags as sane defaults.
+_GOLDEN_GATEWAY_TEMPLATE = {
+    "name": _GOLDEN_NAME_GATEWAY,
+    # Public DNS resolvers — operator should replace with internal servers
+    "dns_servers": ["8.8.8.8", "8.8.4.4"],
+    # Public NTP — replace with internal if required
+    "ntp_servers": ["0.pool.ntp.org", "1.pool.ntp.org"],
+    # Path-selection: prefer lowest latency, failover on packet-loss
+    "path_preferences": {},
+    # BGP hardening: log state changes, send notifications on reset
+    "bgp_config": {},
+    # DHCP snooping on all ports
+    "dhcpd_config": {"enabled": False},
+}
+
 
 def _find_golden(tmpl_list, golden_name):
     """Return the first template whose name matches (case-insensitive)."""
@@ -3066,7 +3084,7 @@ def api_create_golden(org_id, tmpl_type):
     """
     if not valid_uuid(org_id):
         return jsonify({"error": "Invalid org ID"}), 400
-    if tmpl_type not in ("wlan", "network", "rf"):
+    if tmpl_type not in ("wlan", "network", "rf", "gateway"):
         return jsonify({"error": "Invalid template type"}), 400
     sid = get_authed_sid()
     if not sid:
@@ -3082,6 +3100,10 @@ def api_create_golden(org_id, tmpl_type):
         api_path    = f"/orgs/{org_id}/networktemplates"
         golden_body = _GOLDEN_NETWORK_TEMPLATE
         golden_name = _GOLDEN_NAME_NETWORK
+    elif tmpl_type == "gateway":
+        api_path    = f"/orgs/{org_id}/gatewaytemplates"
+        golden_body = _GOLDEN_GATEWAY_TEMPLATE
+        golden_name = _GOLDEN_NAME_GATEWAY
     else:  # rf
         api_path    = f"/orgs/{org_id}/rftemplates"
         golden_body = _GOLDEN_RF_TEMPLATE_V2
