@@ -3135,5 +3135,159 @@ def api_create_golden(org_id, tmpl_type):
         return jsonify({"error": str(e)}), 500
 
 
+# ── Site Creation ─────────────────────────────────────────────────────────────
+
+@app.route("/api/site_options/<org_id>")
+def api_site_options(org_id):
+    """Return available templates (network, wlan, gateway, rf) for new-site creation."""
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    try:
+        def _safe_list(path):
+            try:
+                raw = mist_get(sid, path)
+                lst = raw if isinstance(raw, list) else raw.get("results", [])
+                return [{"id": t["id"], "name": t.get("name", t["id"])}
+                        for t in lst if t.get("id")]
+            except Exception:
+                return []
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            f_net  = pool.submit(_safe_list, f"/orgs/{org_id}/networktemplates")
+            f_wlan = pool.submit(_safe_list, f"/orgs/{org_id}/templates")
+            f_gw   = pool.submit(_safe_list, f"/orgs/{org_id}/gatewaytemplates")
+            f_rf   = pool.submit(_safe_list, f"/orgs/{org_id}/rftemplates")
+
+        return jsonify({
+            "network": f_net.result(),
+            "wlan":    f_wlan.result(),
+            "gateway": f_gw.result(),
+            "rf":      f_rf.result(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/create_site/<org_id>", methods=["POST"])
+def api_create_site(org_id):
+    """
+    Create a new site and optionally assign network/WLAN/gateway/RF templates.
+    Body: {name, address, timezone, country_code,
+           network_template_id, wlan_template_id, gateway_template_id, rf_template_id}
+    Returns: {site_id, site_name, steps: [{label, status, detail}]}
+    """
+    if not valid_uuid(org_id):
+        return jsonify({"error": "Invalid org ID"}), 400
+    sid = get_authed_sid()
+    if not sid:
+        return jsonify({"error": "Not authenticated"}), 401
+    if not org_allowed(org_id):
+        return jsonify({"error": "Access denied"}), 403
+
+    data = request.json or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Site name is required"}), 400
+
+    steps = []
+
+    try:
+        # 1. Create the site
+        site_body = {"name": name}
+        if data.get("address"):
+            site_body["address"] = data["address"].strip()
+        if data.get("timezone"):
+            site_body["timezone"] = data["timezone"]
+        if data.get("country_code"):
+            site_body["country_code"] = data["country_code"].upper()[:2]
+
+        actor = _sessions[sid].get("email", "unknown")
+        _log.info("CREATE_SITE org=%s name=%s actor=%s ip=%s",
+                  org_id, name, actor, request.remote_addr)
+
+        r = mist_post(sid, f"/orgs/{org_id}/sites", site_body)
+        if not r.ok:
+            try:
+                detail = r.json().get("detail", r.text[:300])
+            except Exception:
+                detail = r.text[:300]
+            return jsonify({"error": f"Failed to create site: {detail}"}), r.status_code
+
+        site    = r.json()
+        site_id = site.get("id")
+        steps.append({"label": "Create site", "status": "ok",
+                       "detail": f"Site '{name}' created (ID: {site_id})"})
+
+        # Helper: fetch template, add site_id to applies.site_ids, PUT back
+        def _assign_applies(tmpl_id, api_path, label):
+            try:
+                tmpl    = mist_get(sid, f"{api_path}/{tmpl_id}")
+                applies = tmpl.get("applies") or {"site_ids": [], "sitegroup_ids": []}
+                if "site_ids" not in applies:
+                    applies["site_ids"] = []
+                if site_id not in applies["site_ids"]:
+                    applies["site_ids"].append(site_id)
+                tmpl["applies"] = applies
+                resp = mist_put(sid, f"{api_path}/{tmpl_id}", tmpl)
+                if resp.ok:
+                    steps.append({"label": label, "status": "ok",
+                                   "detail": f"Assigned '{tmpl.get('name', tmpl_id)}'"})
+                else:
+                    steps.append({"label": label, "status": "warn",
+                                   "detail": f"Assignment failed: {resp.text[:200]}"})
+            except Exception as ex:
+                steps.append({"label": label, "status": "warn", "detail": str(ex)})
+
+        # 2. Network template
+        net_id = data.get("network_template_id", "")
+        if net_id and valid_uuid(net_id):
+            _assign_applies(net_id, f"/orgs/{org_id}/networktemplates",
+                            "Assign network template")
+
+        # 3. WLAN template
+        wlan_id = data.get("wlan_template_id", "")
+        if wlan_id and valid_uuid(wlan_id):
+            _assign_applies(wlan_id, f"/orgs/{org_id}/templates",
+                            "Assign WLAN template")
+
+        # 4. Gateway template
+        gw_id = data.get("gateway_template_id", "")
+        if gw_id and valid_uuid(gw_id):
+            _assign_applies(gw_id, f"/orgs/{org_id}/gatewaytemplates",
+                            "Assign gateway template")
+
+        # 5. RF template — assigned via site setting (rftemplate_id), not applies
+        rf_id = data.get("rf_template_id", "")
+        if rf_id and valid_uuid(rf_id):
+            try:
+                resp = mist_patch(sid, f"/sites/{site_id}/setting",
+                                  {"rftemplate_id": rf_id})
+                if resp.ok:
+                    steps.append({"label": "Assign RF template", "status": "ok",
+                                   "detail": "RF template applied to site settings"})
+                else:
+                    steps.append({"label": "Assign RF template", "status": "warn",
+                                   "detail": f"RF assignment failed: {resp.text[:200]}"})
+            except Exception as ex:
+                steps.append({"label": "Assign RF template", "status": "warn",
+                               "detail": str(ex)})
+
+        return jsonify({
+            "site_id":   site_id,
+            "site_name": name,
+            "steps":     steps,
+        })
+
+    except Exception as e:
+        _log.exception("CREATE_SITE error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=False, port=5001)
