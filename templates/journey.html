@@ -1354,9 +1354,9 @@ function renderCreate() {
   const opts = state.siteOptions || {};
 
   function _tmplOptions(list) {
-    if (!list || !list.length) return `<option value="">— none available —</option>`;
-    return `<option value="">— none (skip) —</option>` +
-      list.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
+    const noneOpt = `<option value="">Do not assign a template</option>`;
+    if (!list || !list.length) return noneOpt;
+    return noneOpt + list.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
   }
 
   // Common timezones
