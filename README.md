@@ -61,6 +61,8 @@ Browser  ──►  Flask (dpc_to_nac.py)  ──►  Mist REST API
 
 ## Quick Start (local)
 
+> For full step-by-step instructions including Docker, first login, upgrades, and troubleshooting, see **[SETUP.md](SETUP.md)**.
+
 ### Prerequisites
 - Python 3.11+
 - A Juniper Mist account with org admin access
